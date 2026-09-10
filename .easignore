@@ -1,0 +1,20 @@
+# Upload filter for EAS builds. Required because mobile/ is untracked in git,
+# so builds run with EAS_NO_VCS=1 and archive this directory directly --
+# without this file node_modules would be uploaded with it.
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+coverage/
+android/
+ios/
+
+# Secrets and local-only config: build-time env comes from eas.json profiles.
+.env
+.env.*
+!.env.example
+
+*.log
+*.bak
+eas.json.bak

@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Fuvay Staff",
+    "slug": "serviceos-staff",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.serviceos.staff",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Fuvay needs location to track your jobs."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#071633"
+      },
+      "package": "com.serviceos.staff",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-location",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/fuvay-logo-native.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#071633"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3e002424-d662-48f1-a0b1-bb4c9dc460f5"
+      }
+    },
+    "owner": "trainee05"
+  }
+}

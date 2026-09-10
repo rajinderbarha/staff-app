@@ -1,0 +1,12 @@
+{
+  "extends":  "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths":  { "@/*": ["./src/*"] },
+    // TypeScript 6 (Expo SDK 57) no longer pulls every node_modules/@types
+    // package in automatically, so the Jest and Node globals used by the
+    // test files have to be named explicitly or tsc reports them undefined.
+    "types":  ["jest", "node"]
+  },
+  "include": ["**/*.ts","**/*.tsx"]
+}
