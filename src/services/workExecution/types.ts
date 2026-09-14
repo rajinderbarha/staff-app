@@ -49,6 +49,7 @@ export interface PartsRequestDTO {
   job_id: string;
   part_name: string;
   quantity: number;
+  /** Per-unit customer price; for inventory parts, the catalogue price. */
   estimated_cost: number;
   reason: string;
   technician_note: string | null;
@@ -56,6 +57,32 @@ export interface PartsRequestDTO {
   status: PartsRequestStatus;
   rejection_reason: string | null;
   created_at: string | null;
+  procurement_source?: "inventory" | "external";
+  inventory_item_id?: string | null;
+}
+
+/** One provider inventory item, as GET .../parts-catalog returns it. The
+ * provider's own cost and margin are never sent to the technician. */
+export interface PartsCatalogItemDTO {
+  item_id: string;
+  name: string;
+  sku: string;
+  category: string | null;
+  unit: string;
+  /** What the customer pays per unit. */
+  unit_price: number;
+  warranty: string | null;
+  available_qty: number;
+  /** The most one request can take: a reservation draws on one stock location. */
+  max_request_qty: number;
+}
+
+/** A technician picks the part; its name and price come from the inventory. */
+export interface CreatePartsRequestBody {
+  inventory_item_id: string;
+  quantity: number;
+  reason: string;
+  technician_note?: string;
 }
 
 export interface WorkReadinessDTO {

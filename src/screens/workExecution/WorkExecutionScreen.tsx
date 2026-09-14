@@ -206,9 +206,11 @@ export function WorkExecutionScreen({ route, navigation }: Props) {
       ) : null}
 
       <RequestPartSheet
+        jobId={jobId}
         visible={requestPartOpen}
         onClose={() => setRequestPartOpen(false)}
         submitting={mutating}
+        errorMessage={mutationError?.safeMessage}
         onSubmit={async body => {
           const result = await requestPart(body);
           if (result.ok) setRequestPartOpen(false);

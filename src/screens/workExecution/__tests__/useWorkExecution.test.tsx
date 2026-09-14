@@ -64,8 +64,8 @@ describe("useWorkExecution (spec sections 6, 7, 15, 16)", () => {
     const { result } = renderHook(() => useWorkExecution("j1"), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    await act(async () => { await result.current.requestPart({ part_name: "Filter", quantity: 1, estimated_cost: 150, reason: "Clogged" }); });
+    await act(async () => { await result.current.requestPart({ inventory_item_id: "item-1", quantity: 1, reason: "Clogged" }); });
 
-    expect(workExecutionApi.createPartsRequest).toHaveBeenCalledWith("j1", { part_name: "Filter", quantity: 1, estimated_cost: 150, reason: "Clogged" });
+    expect(workExecutionApi.createPartsRequest).toHaveBeenCalledWith("j1", { inventory_item_id: "item-1", quantity: 1, reason: "Clogged" });
   });
 });

@@ -5,6 +5,12 @@ import { ThemeProvider } from "../../../design-system/themes";
 import { PartsRequestScreen } from "../PartsRequestScreen";
 
 jest.mock("../useWorkExecution");
+jest.mock("../usePartsCatalog", () => ({
+  usePartsCatalog: () => ({
+    items: [{ item_id: "item-wrench", name: "Pipe wrench", sku: "WR-1", category: null, unit: "unit", unit_price: 400, warranty: null, available_qty: 3, max_request_qty: 3 }],
+    isLoading: false, isError: false, error: null, refetch: jest.fn(), searchTerm: "",
+  }),
+}));
 import { useWorkExecution } from "../useWorkExecution";
 import type { PartsRequestDTO } from "../../../services/workExecution/types";
 
@@ -30,7 +36,7 @@ function baseReturn(overrides: Partial<ReturnType<typeof useWorkExecution>> = {}
     isLoading: false, isError: false, error: null, isRefetching: false, refetch: jest.fn(),
     mutating: false, mutationError: null,
     startWork: jest.fn(), pauseWork: jest.fn(), resumeWork: jest.fn(), finishWork: jest.fn(),
-    requestPart: jest.fn().mockResolvedValue({ ok: true }), saveChecklistResponse: jest.fn(),
+    requestPart: jest.fn().mockResolvedValue({ ok: true }), cancelPart: jest.fn().mockResolvedValue({ ok: true }), saveChecklistResponse: jest.fn(),
     ...overrides,
   };
 }
@@ -66,10 +72,22 @@ describe("PartsRequestScreen (Final Phase gap closure)", () => {
     (useWorkExecution as jest.Mock).mockReturnValue(baseReturn({ requestPart }));
     renderScreen();
     fireEvent.press(screen.getByText("Request a part"));
-    fireEvent.changeText(screen.getByLabelText("Part / material"), "Wrench");
+    fireEvent.press(screen.getByLabelText("Pipe wrench"));
     fireEvent.changeText(screen.getByLabelText("Reason"), "Needed for install");
-    fireEvent.press(screen.getByText("Send request"));
-    expect(requestPart).toHaveBeenCalled();
+    fireEvent.press(screen.getByText("Send to customer"));
+    expect(requestPart).toHaveBeenCalledWith({ inventory_item_id: "item-wrench", quantity: 1, reason: "Needed for install" });
+  });
+
+  it("lets the technician cancel a request nobody has decided on, after confirming", () => {
+    const cancelPart = jest.fn().mockResolvedValue({ ok: true });
+    (useWorkExecution as jest.Mock).mockReturnValue(baseReturn({ cancelPart }));
+    renderScreen();
+    // p1 is still waiting; p2 was already rejected and cannot be cancelled.
+    expect(screen.getAllByText("Cancel request")).toHaveLength(1);
+    fireEvent.press(screen.getByText("Cancel request"));
+    expect(cancelPart).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText("Yes, cancel it"));
+    expect(cancelPart).toHaveBeenCalledWith("p1");
   });
 
   it("never shows Request a part once the job is terminal", () => {

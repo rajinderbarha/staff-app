@@ -5,14 +5,15 @@ import { useTheme } from "../../design-system/themes";
 import { SafeAreaScreen } from "../../design-system/components/foundation/SafeAreaScreen";
 import { Card, Section } from "../../design-system/components/foundation/Layout";
 import { AppText } from "../../design-system/components/typography/AppText";
-import { PrimaryButton } from "../../design-system/components/actions/Buttons";
+import { PrimaryButton, TertiaryButton } from "../../design-system/components/actions/Buttons";
+import { ConfirmationDialog } from "../../design-system/components/overlays/ConfirmationDialog";
 import { InlineAlert } from "../../design-system/components/feedback/Banner";
 import { EmptyState } from "../../design-system/components/feedback/States";
 import { RetryState } from "../../design-system/components/feedback/States";
 import { Skeleton } from "../../design-system/components/feedback/Loading";
 import { RequestPartSheet } from "./components/RequestPartSheet";
 import { useWorkExecution } from "./useWorkExecution";
-import { PartsRequestStatus } from "../../services/workExecution/types";
+import { CreatePartsRequestBody, PartsRequestStatus } from "../../services/workExecution/types";
 import { MobileHeader } from "../../design-system/components/navigation";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
 
@@ -28,6 +29,9 @@ const STATUS_LABEL: Record<PartsRequestStatus, string> = {
   installed: "Installed",
   cancelled: "Cancelled",
 };
+
+/** Nobody has decided on these yet, so the technician may still cancel them. */
+const CANCELLABLE: PartsRequestStatus[] = ["requested", "customer_approval_pending"];
 
 const STATUS_TONE: Record<PartsRequestStatus, "neutral" | "success" | "warning" | "danger"> = {
   requested: "warning", business_approved: "success", customer_approval_pending: "warning",
@@ -49,14 +53,21 @@ const STATUS_TONE: Record<PartsRequestStatus, "neutral" | "success" | "warning" 
 export function PartsRequestScreen({ route, navigation }: Props) {
   const { theme } = useTheme();
   const { jobId } = route.params;
-  const { data, isLoading, isError, error, refetch, requestPart, mutating, mutationError } = useWorkExecution(jobId);
+  const { data, isLoading, isError, error, refetch, requestPart, cancelPart, mutating, mutationError } = useWorkExecution(jobId);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [cancelId, setCancelId] = useState<string | null>(null);
 
   const goBack = () => navigation.navigate("JobDetail", { jobId });
 
-  const handleSubmit = async (body: { part_name: string; quantity: number; estimated_cost: number; reason: string }) => {
+  const handleSubmit = async (body: CreatePartsRequestBody) => {
     const result = await requestPart(body);
     if (result.ok) setSheetVisible(false);
+  };
+
+  const handleCancelPart = async () => {
+    if (!cancelId) return;
+    await cancelPart(cancelId);
+    setCancelId(null);
   };
 
   return (
@@ -68,7 +79,7 @@ export function PartsRequestScreen({ route, navigation }: Props) {
         ) : isError ? (
           <RetryState title="Couldn't load parts requests" message={error?.safeMessage} onRetry={() => refetch()} />
         ) : !data ? null : data.parts.length === 0 ? (
-          <EmptyState icon="construct-outline" title="No parts requested yet" message="Request a part if this job needs materials the tenant needs to approve." />
+          <EmptyState icon="construct-outline" title="No parts requested yet" message="Pick a part from your provider's inventory. The customer approves it in their chat." />
         ) : (
           <Section>
             {data.parts.map(part => (
@@ -84,6 +95,9 @@ export function PartsRequestScreen({ route, navigation }: Props) {
                       : STATUS_LABEL[part.status]}
                   />
                 </View>
+                {CANCELLABLE.includes(part.status) && !data.job.is_terminal ? (
+                  <TertiaryButton label="Cancel request" onPress={() => setCancelId(part.parts_request_id)} disabled={mutating} />
+                ) : null}
               </Card>
             ))}
           </Section>
@@ -97,10 +111,24 @@ export function PartsRequestScreen({ route, navigation }: Props) {
       </ScrollView>
 
       <RequestPartSheet
+        jobId={jobId}
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}
         onSubmit={handleSubmit}
         submitting={mutating}
+        errorMessage={mutationError?.safeMessage}
+      />
+
+      <ConfirmationDialog
+        visible={cancelId !== null}
+        title="Cancel part request?"
+        message="The customer will no longer be asked to approve this part. You can request it again later."
+        confirmLabel="Yes, cancel it"
+        cancelLabel="Keep it"
+        destructive
+        loading={mutating}
+        onConfirm={handleCancelPart}
+        onCancel={() => setCancelId(null)}
       />
     </SafeAreaScreen>
   );

@@ -5,6 +5,7 @@ import { WorkExecutionScreen } from "../WorkExecutionScreen";
 import { WorkExecutionDetailDTO } from "../../../services/workExecution/types";
 
 jest.mock("../useWorkExecution");
+jest.mock("../usePartsCatalog");
 jest.mock("../../../hooks/useNetworkStatus", () => ({ useNetworkStatus: jest.fn(() => ({ meta: { readiness: "production_ready" }, networkState: "online", cacheState: "fresh", pendingDrafts: 0, syncState: "idle" })) }));
 jest.mock("expo-image-picker", () => ({
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
@@ -12,6 +13,7 @@ jest.mock("expo-image-picker", () => ({
 }));
 
 import { useWorkExecution } from "../useWorkExecution";
+import { usePartsCatalog } from "../usePartsCatalog";
 import { useNetworkStatus } from "../../../hooks/useNetworkStatus";
 
 const mockNavigate = jest.fn();
@@ -47,6 +49,7 @@ function baseHookReturn(overrides: Partial<ReturnType<typeof useWorkExecution>> 
     resumeWork: jest.fn(async () => ({ ok: true as const })),
     finishWork: jest.fn(async () => ({ ok: true as const })),
     requestPart: jest.fn(async () => ({ ok: true as const })),
+    cancelPart: jest.fn(async () => ({ ok: true as const })),
     saveChecklistResponse: jest.fn(async () => ({ ok: true as const })),
     ...overrides,
   };
@@ -59,6 +62,10 @@ function renderScreen() {
 beforeEach(() => {
   jest.clearAllMocks();
   (useNetworkStatus as jest.Mock).mockReturnValue({ meta: { readiness: "production_ready" }, networkState: "online", cacheState: "fresh", pendingDrafts: 0, syncState: "idle" });
+  (usePartsCatalog as jest.Mock).mockReturnValue({
+    items: [{ item_id: "item-filter", name: "AC filter", sku: "FLT-1", category: "AC", unit: "unit", unit_price: 150, warranty: null, available_qty: 5, max_request_qty: 5 }],
+    isLoading: false, isError: false, error: null, refetch: jest.fn(), searchTerm: "",
+  });
 });
 
 describe("WorkExecutionScreen — active session (spec sections 3, 7, 8, 9)", () => {
@@ -122,16 +129,16 @@ describe("WorkExecutionScreen — ready to start (spec section 6)", () => {
 });
 
 describe("WorkExecutionScreen — parts request", () => {
-  it("opens the request-part sheet and submits through the real mutation", () => {
+  it("picks a part from the provider inventory and submits it through the real mutation", () => {
     const requestPart = jest.fn(async () => ({ ok: true as const }));
     (useWorkExecution as jest.Mock).mockReturnValue(baseHookReturn({ requestPart }));
     renderScreen();
     fireEvent.press(screen.getByText("+ Request part"));
-    fireEvent.changeText(screen.getByLabelText("Part / material"), "Filter");
-    fireEvent.changeText(screen.getByLabelText("Estimated cost (₹)"), "150");
+    expect(screen.queryByLabelText("Part / material")).toBeNull();
+    fireEvent.press(screen.getByLabelText("AC filter"));
     fireEvent.changeText(screen.getByLabelText("Reason"), "Clogged filter");
-    fireEvent.press(screen.getByText("Send request"));
-    expect(requestPart).toHaveBeenCalledWith({ part_name: "Filter", quantity: 1, estimated_cost: 150, reason: "Clogged filter" });
+    fireEvent.press(screen.getByText("Send to customer"));
+    expect(requestPart).toHaveBeenCalledWith({ inventory_item_id: "item-filter", quantity: 1, reason: "Clogged filter" });
   });
 });
 
