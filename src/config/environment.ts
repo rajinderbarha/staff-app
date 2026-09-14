@@ -40,12 +40,30 @@ function parseAppEnv(raw: string | undefined): AppEnvironment {
 }
 
 /**
+ * Expo only inlines EXPO_PUBLIC_* values into a release bundle where they are
+ * read as literal `process.env.EXPO_PUBLIC_X` dot-access. Passing the whole
+ * `process.env` object around (or destructuring it) is NOT inlined, and the
+ * runtime process.env of a release build does not carry these values -- so a
+ * `= process.env` default works under Metro in dev and silently yields an
+ * empty env (appEnv "local", localhost base URL) in an EAS release APK.
+ * Every variable must therefore be named explicitly here.
+ */
+function readPublicEnv(): Partial<NodeJS.ProcessEnv> {
+  return {
+    EXPO_PUBLIC_ENV: process.env.EXPO_PUBLIC_ENV,
+    EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+    EXPO_PUBLIC_API_TIMEOUT_MS: process.env.EXPO_PUBLIC_API_TIMEOUT_MS,
+    EXPO_PUBLIC_ALLOW_INSECURE_HTTP: process.env.EXPO_PUBLIC_ALLOW_INSECURE_HTTP,
+  };
+}
+
+/**
  * Builds and validates the environment config. Throws with a clear message
  * rather than silently falling back to a wrong/insecure default -- a
  * missing/invalid base URL outside local dev must fail loudly at startup,
  * not surface later as a mysterious network error.
  */
-export function buildEnvironment(env: Partial<NodeJS.ProcessEnv> = process.env): Environment {
+export function buildEnvironment(env: Partial<NodeJS.ProcessEnv> = readPublicEnv()): Environment {
   const appEnv = parseAppEnv(env.EXPO_PUBLIC_ENV);
   const rawBaseUrl = env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
