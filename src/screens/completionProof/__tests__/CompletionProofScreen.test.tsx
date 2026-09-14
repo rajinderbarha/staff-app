@@ -106,6 +106,22 @@ describe("CompletionProofScreen — draft state (spec sections 2, 5, 7, 8, 9)", 
     expect(submit).toHaveBeenCalled();
   });
 
+  it("tells the technician photos are optional and lets a photo-less proof submit", () => {
+    const submit = jest.fn(async () => ({ ok: true as const }));
+    const detail = {
+      ...BASE_DETAIL,
+      proof: { ...BASE_DETAIL.proof, before_photo_ids: [], after_photo_ids: [] },
+      readiness: { ...BASE_DETAIL.readiness, can_submit: true, missing_check_ids: [], blockers: [] },
+      allowed_actions: ["save_draft", "submit_proof"],
+    };
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, submit }));
+    renderScreen();
+    expect(screen.getByText("Optional. You can submit without photos.")).toBeTruthy();
+    expect(screen.queryByText("Minimum 1 after photo required")).toBeNull();
+    fireEvent.press(screen.getByText("Submit completion proof"));
+    expect(submit).toHaveBeenCalled();
+  });
+
   it("saves the draft resolution summary through the real mutation on blur", () => {
     const saveDraft = jest.fn(async () => ({ ok: true as const }));
     (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ saveDraft }));

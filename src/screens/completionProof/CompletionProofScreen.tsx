@@ -177,8 +177,8 @@ export function CompletionProofScreen({ route, navigation }: Props) {
               onAddAfter={() => handleAddEvidence("after")}
               onRemove={(category, fileId) => removeEvidence(category, fileId)}
             />
-            {data.readiness.missing_evidence_categories.includes("after") ? (
-              <AppText variant="caption" color="warning" style={{ marginTop: theme.spacing.xs }}>Minimum 1 after photo required</AppText>
+            {isEditable ? (
+              <AppText variant="caption" color="tertiary" style={{ marginTop: theme.spacing.xs }}>Optional. You can submit without photos.</AppText>
             ) : null}
           </Card>
         </Section>
