@@ -45,6 +45,7 @@ export function CompletionProofScreen({ route, navigation }: Props) {
   } = useCompletionProof(jobId);
 
   const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goToPayment = useCallback(() => navigation.navigate("DirectPaymentConfirmation", { jobId }), [navigation, jobId]);
 
   const summaryValue = resolutionSummary ?? data?.proof.resolution_summary ?? "";
   const notesValue = serviceNotes ?? data?.proof.final_service_notes ?? "";
@@ -57,6 +58,14 @@ export function CompletionProofScreen({ route, navigation }: Props) {
     const result = await submit();
     if (result.ok) { /* stay on screen to show submitted read-only state + handover controls */ }
   }, [submit]);
+
+  const handleRequestHandover = useCallback(async () => {
+    const result = await requestHandover();
+    // Payment declaration is the technician's next step. It may be recorded
+    // while the customer is acknowledging handover; final closure remains
+    // guarded by the backend until both customer confirmations pass.
+    if (result.ok) goToPayment();
+  }, [requestHandover, goToPayment]);
 
   const handleAddEvidence = useCallback(async (category: "before" | "after") => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -194,7 +203,7 @@ export function CompletionProofScreen({ route, navigation }: Props) {
           <Section>
             <CustomerHandoverCard
               status={data.proof.handover_status}
-              onRequest={requestHandover}
+              onRequest={handleRequestHandover}
               onSendReminder={sendReminder}
               onMarkUnavailable={markCustomerUnavailable}
               canRequest={data.allowed_actions.includes("request_handover")}
@@ -229,6 +238,15 @@ export function CompletionProofScreen({ route, navigation }: Props) {
           <View style={{ flex: 1 }}>
             <PrimaryButton label="Submit completion proof" onPress={handleSubmit} disabled={!canSubmit} loading={mutating} fullWidth />
           </View>
+        </View>
+      ) : data.proof.status === "submitted" && data.proof.handover_status !== "not_requested" ? (
+        <View style={{ padding: theme.spacing.base, borderTopWidth: 1, borderTopColor: theme.colors.borderSubtle }}>
+          <PrimaryButton
+            label={data.proof.handover_status === "acknowledged" ? "Record payment received" : "Continue to payment"}
+            onPress={goToPayment}
+            disabled={offline}
+            fullWidth
+          />
         </View>
       ) : null}
     </SafeAreaScreen>

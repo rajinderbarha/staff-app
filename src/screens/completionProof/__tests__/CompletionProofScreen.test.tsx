@@ -162,12 +162,31 @@ describe("CompletionProofScreen — submitted / handover (spec section 10)", () 
     expect(screen.queryByText("Customer accepted")).toBeNull();
   });
 
+  it("continues to payment after a handover request succeeds", async () => {
+    const requestHandover = jest.fn(async () => ({ ok: true as const }));
+    const detail = { ...BASE_DETAIL, proof: { ...BASE_DETAIL.proof, status: "submitted" as const }, allowed_actions: ["request_handover"] };
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, requestHandover }));
+    renderScreen();
+    fireEvent.press(screen.getByText("Request"));
+    await Promise.resolve();
+    expect(mockNavigate).toHaveBeenCalledWith("DirectPaymentConfirmation", { jobId: "j1" });
+  });
+
   it("shows acknowledgment-pending state and a reminder action", () => {
     const detail = { ...BASE_DETAIL, proof: { ...BASE_DETAIL.proof, status: "submitted" as const, handover_status: "requested" as const }, allowed_actions: ["send_reminder", "mark_customer_unavailable"] };
     (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail }));
     renderScreen();
     expect(screen.getByText("Acknowledgment pending")).toBeTruthy();
     expect(screen.getByText("Send reminder")).toBeTruthy();
+    expect(screen.getByText("Continue to payment")).toBeTruthy();
+  });
+
+  it("shows the payment-received action after customer acknowledgment", () => {
+    const detail = { ...BASE_DETAIL, proof: { ...BASE_DETAIL.proof, status: "submitted" as const, handover_status: "acknowledged" as const }, allowed_actions: [] };
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail }));
+    renderScreen();
+    fireEvent.press(screen.getByText("Record payment received"));
+    expect(mockNavigate).toHaveBeenCalledWith("DirectPaymentConfirmation", { jobId: "j1" });
   });
 });
 

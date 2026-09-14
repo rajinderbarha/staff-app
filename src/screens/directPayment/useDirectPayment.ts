@@ -26,9 +26,23 @@ export function useDirectPayment(jobId: string) {
       return result.data;
     },
     enabled: Boolean(jobId),
+    refetchOnMount: "always",
+    // Customer payment confirmation is external to the staff app. Poll only
+    // while it is genuinely pending, then stop as soon as it resolves.
+    refetchInterval: query => {
+      const status = query.state.data?.provider_record?.status;
+      return status === "awaiting_customer" || status === "awaiting_provider" ? 5000 : false;
+    },
   });
 
-  const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: key }), [queryClient, key]);
+  const refresh = useCallback(async () => {
+    // Finalization changes Job Detail, My Work and Home. Refresh every related
+    // projection so a completed job cannot still look open after navigation.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+      queryClient.invalidateQueries({ queryKey: ["technician"] }),
+    ]);
+  }, [queryClient]);
 
   const runMutation = useCallback(async (fn: () => Promise<{ ok: boolean; error?: AppError }>) => {
     if (mutating) return { ok: false as const };

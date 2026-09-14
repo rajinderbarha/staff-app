@@ -26,9 +26,28 @@ export function useCompletionProof(jobId: string) {
       return result.data;
     },
     enabled: Boolean(jobId),
+    refetchOnMount: "always",
+    // Handover is confirmed from the customer app/chat, so no technician
+    // mutation can refresh this screen at the moment that external action
+    // happens. Keep the short-lived waiting state authoritative.
+    refetchInterval: query => {
+      const proof = query.state.data?.proof;
+      return proof?.status === "submitted" &&
+        (proof.handover_status === "requested" || proof.handover_status === "customer_unavailable")
+        ? 5000
+        : false;
+    },
   });
 
-  const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: key }), [queryClient, key]);
+  const refresh = useCallback(async () => {
+    // Completion mutations change the projections behind Job Detail, My Work
+    // and Home as well as this screen. Invalidating only the private proof key
+    // left the technician navigating back into stale workflow state.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+      queryClient.invalidateQueries({ queryKey: ["technician"] }),
+    ]);
+  }, [queryClient]);
 
   const runMutation = useCallback(async (fn: () => Promise<{ ok: boolean; error?: AppError }>) => {
     if (mutating) return { ok: false as const };
