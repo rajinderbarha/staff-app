@@ -15,7 +15,12 @@ export function isProblemDetail(json: unknown): json is ProblemDetailBody {
 }
 
 export async function safeParseJson(response: Response): Promise<unknown> {
-  const text = await response.text();
+  return parseJsonText(await response.text());
+}
+
+/** For transports that hand back the raw body text rather than a Response
+ * (the multipart uploads in services/media go over XMLHttpRequest). */
+export function parseJsonText(text: string): unknown {
   if (!text) return null;
   try {
     return JSON.parse(text);
