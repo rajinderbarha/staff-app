@@ -4,65 +4,65 @@ import { useTheme } from "../../../design-system/themes";
 import { Card } from "../../../design-system/components/foundation/Layout";
 import { AppText } from "../../../design-system/components/typography/AppText";
 import { CustomerAlias, RelayContactButton } from "../../../design-system/components/data-display/Privacy";
+import { DateTimeText } from "../../../design-system/components/data-display/DateTimeText";
 import { CustomerContactDTO } from "../../../services/jobDetail/types";
 
 /** Backend reasons a call cannot be placed, in wording a technician can act on.
  * Kept as a closed map so an unrecognised code falls back to a neutral message
  * rather than showing a raw error constant to a field user. */
-const CANNOT_CALL_COPY: Record<string, string> = {
-  MASKED_CALLING_NOT_CONFIGURED: "Calling is unavailable right now.",
+export const CANNOT_CALL_COPY: Record<string, string> = {
   MASKED_CALLING_JOB_NOT_CALLABLE: "This job is closed, so calls are turned off.",
   MASKED_CALLING_NO_CUSTOMER_NUMBER: "No contact number on file for this customer.",
-  MASKED_CALLING_NO_STAFF_NUMBER: "Add your phone number in Profile to place calls.",
 };
+
+export function cannotCallText(reasonCode: string | null | undefined): string | null {
+  return reasonCode ? (CANNOT_CALL_COPY[reasonCode] ?? "Calling is unavailable right now.") : null;
+}
 
 export interface CustomerContactCardProps {
   customer: CustomerContactDTO;
-  onCallRelay: () => void;
+  onCall: () => void;
   onMessageRelay: () => void;
-  /** Live capability from the masked-calling backend. When omitted, the card
-   * falls back to the job-detail DTO's own flags, so existing callers that
-   * have not adopted the hook keep working unchanged. */
-  callAvailable?: boolean;
-  cannotCallReason?: string | null;
   calling?: boolean;
-  /** True once a bridged call has genuinely CONNECTED for this job. */
-  connectedBefore?: boolean;
   callError?: string | null;
 }
 
 /**
- * Never renders a raw phone or email. Calls are bridged by the platform, so
- * neither the technician nor the customer sees the other's number -- and there
- * is no number in the payload to render even by mistake.
+ * The customer's number is never rendered or held here: the Call button asks
+ * the backend for it, which records the tap, and opens the phone dialer.
  *
- * Availability is the BACKEND's decision (`can_call`), never inferred here from
- * job status: when it says no, the reason is shown instead of a dead button or
- * an invented fallback contact route.
+ * Availability and the call log both come from the job-detail projection, so
+ * the "last called" time is the backend's record, not a local guess.
  */
 export function CustomerContactCard({
-  customer, onCallRelay, onMessageRelay,
-  callAvailable, cannotCallReason, calling, connectedBefore, callError,
+  customer, onCall, onMessageRelay, calling, callError,
 }: CustomerContactCardProps) {
   const { theme } = useTheme();
-  const canCall = callAvailable ?? customer.call_relay_available;
-  const reasonCode = cannotCallReason ?? customer.call_relay_reason;
-  const reasonText = reasonCode
-    ? (CANNOT_CALL_COPY[reasonCode] ?? "Calling is unavailable right now.")
-    : null;
+  const canCall = customer.phone_call_available;
+  const reasonText = cannotCallText(customer.phone_call_reason);
+  const callCount = customer.call_count ?? 0;
 
   return (
     <Card>
       <CustomerAlias alias={customer.customer_alias} showAvatar />
 
-      <AppText variant="caption" color="secondary" style={{ marginTop: theme.spacing.xs }}>
-        Calls go through the platform — your number and the customer&apos;s stay private.
-      </AppText>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", marginTop: theme.spacing.xs }}>
+        {customer.last_called_at ? (
+          <>
+            <AppText variant="caption" color="secondary">
+              {`Called ${callCount} ${callCount === 1 ? "time" : "times"} · last `}
+            </AppText>
+            <DateTimeText isoString={customer.last_called_at} variant="caption" color="secondary" />
+          </>
+        ) : (
+          <AppText variant="caption" color="secondary">Not called yet</AppText>
+        )}
+      </View>
 
       <View style={{ flexDirection: "row", gap: theme.spacing.lg, marginTop: theme.spacing.sm }}>
         <RelayContactButton
-          label={calling ? "Connecting…" : connectedBefore ? "Call again" : "Call customer"}
-          onPress={onCallRelay}
+          label={calling ? "Opening dialer…" : callCount > 0 ? "Call again" : "Call customer"}
+          onPress={onCall}
           disabled={!canCall || !!calling}
         />
         <RelayContactButton

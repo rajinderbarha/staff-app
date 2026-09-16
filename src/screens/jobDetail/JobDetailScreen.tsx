@@ -16,8 +16,8 @@ import { ErrorState } from "../../design-system/components/feedback/States";
 import { InlineAlert, OfflineBanner } from "../../design-system/components/feedback/Banner";
 import { ActionSheet } from "../../design-system/components/overlays/ActionSheet";
 import { PrimaryButton, SecondaryButton } from "../../design-system/components/actions/Buttons";
-import { CustomerContactCard } from "./components/CustomerContactCard";
-import { useMaskedCall } from "./useMaskedCall";
+import { CustomerContactCard, cannotCallText } from "./components/CustomerContactCard";
+import { useCustomerCall } from "./useCustomerCall";
 import { JobDetailsGrid } from "./components/JobDetailsGrid";
 import { RequirementsSection } from "./components/RequirementsSection";
 import { VisitFeeBanner } from "./components/VisitFeeBanner";
@@ -49,10 +49,9 @@ export function JobDetailScreen({ route, navigation }: Props) {
     logCustomerContacted, startInspection,
   } = useJobDetail(jobId);
 
-  // Masked calling lives beside job detail rather than inside it: calling
-  // capability is owned by its own engine and changes independently of the
-  // job's execution state (a telephony outage must not invalidate job detail).
-  const maskedCall = useMaskedCall(jobId);
+  // Calls go through the technician's own phone dialer. Each tap is recorded
+  // by the backend, and the refetch shows the new "last called" time.
+  const customerCall = useCustomerCall(jobId, refetch);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -94,23 +93,25 @@ export function JobDetailScreen({ route, navigation }: Props) {
     }
   }, [data, acceptJob, startTravel, markArrived, startInspection, openExecutionScreen]);
 
-  // The contact-first task is satisfied EITHER by a platform call that
-  // genuinely connects (the masked-calling engine records it itself) or by the
-  // technician confirming they spoke to the customer. Both routes stay open:
-  // where no telephony vendor is configured the call cannot be placed at all,
-  // and without the second route the job would sit on `accepted` forever.
+  // Opening the dialer does not prove the customer answered, so the
+  // contact-first task is completed only by the technician confirming they
+  // spoke to the customer. Calling is offered first, the confirmation after.
   const handleContactChoice = useCallback(async (key: string) => {
-    if (key === "call") await maskedCall.placeCall();
-    else if (key === "confirm") await logCustomerContacted();
-    await refetch();
-  }, [maskedCall, logCustomerContacted, refetch]);
+    if (key === "call") await customerCall.callCustomer();
+    else if (key === "confirm") {
+      await logCustomerContacted();
+      await refetch();
+    }
+  }, [customerCall, logCustomerContacted, refetch]);
 
   const contactOptions = useMemo(() => {
-    const canCall = Boolean(maskedCall.contact?.can_call);
+    const canCall = Boolean(data?.customer.phone_call_available);
     return [
       {
         key: "call",
-        label: canCall ? "Call the customer now" : "Calling unavailable on this job",
+        label: canCall
+          ? (data?.customer.call_count ? "Call the customer again" : "Call the customer now")
+          : (cannotCallText(data?.customer.phone_call_reason) ?? "Calling unavailable on this job"),
         icon: "call-outline" as const,
         disabled: !canCall,
       },
@@ -120,7 +121,7 @@ export function JobDetailScreen({ route, navigation }: Props) {
         icon: "checkmark-circle-outline" as const,
       },
     ];
-  }, [maskedCall.contact]);
+  }, [data]);
 
   const workflowSteps: WorkflowStepModel[] = useMemo(
     () => (data?.workflow.stages ?? []).map(s => ({ key: s.key, label: s.label, state: s.state })),
@@ -223,13 +224,10 @@ export function JobDetailScreen({ route, navigation }: Props) {
         <Section>
           <CustomerContactCard
             customer={data.customer}
-            onCallRelay={() => { void maskedCall.placeCall(); }}
+            onCall={() => { void customerCall.callCustomer(); }}
             onMessageRelay={() => {}}
-            callAvailable={maskedCall.contact?.can_call}
-            cannotCallReason={maskedCall.contact?.cannot_call_reason ?? null}
-            calling={maskedCall.calling}
-            connectedBefore={maskedCall.contact?.connected_before}
-            callError={maskedCall.error?.safeMessage ?? null}
+            calling={customerCall.calling}
+            callError={customerCall.error}
           />
         </Section>
 

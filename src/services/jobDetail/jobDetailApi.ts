@@ -1,6 +1,6 @@
 import { authenticatedRequest } from "../api/authenticatedClient";
 import { ApiResult } from "../api/types";
-import { JobMobileDetailDTO, JobTimelineDTO } from "./types";
+import { CustomerCallDTO, JobMobileDetailDTO, JobTimelineDTO } from "./types";
 
 /** GET /v1/staff/service-jobs/{job_id}/mobile-detail (Phase J). */
 export function getJobDetail(jobId: string, signal?: AbortSignal): Promise<ApiResult<JobMobileDetailDTO>> {
@@ -30,6 +30,15 @@ export function startTravel(jobId: string): Promise<ApiResult<Record<string, unk
 
 export function markArrived(jobId: string): Promise<ApiResult<Record<string, unknown>>> {
   return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/reached-site`, { method: "POST", unsafeToRetry: true });
+}
+
+/**
+ * Records a tap on Call and returns the number to dial. The backend releases
+ * the number only here, so every dialer opening is on record. `unsafeToRetry`
+ * because a silent retry would record a second tap.
+ */
+export function recordCustomerCall(jobId: string): Promise<ApiResult<CustomerCallDTO>> {
+  return authenticatedRequest<CustomerCallDTO>(`/v1/staff/service-jobs/${jobId}/customer-call`, { method: "POST", unsafeToRetry: true });
 }
 
 /**

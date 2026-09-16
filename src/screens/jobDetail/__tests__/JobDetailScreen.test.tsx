@@ -5,11 +5,11 @@ import { JobDetailScreen } from "../JobDetailScreen";
 import { JobMobileDetailDTO } from "../../../services/jobDetail/types";
 
 jest.mock("../useJobDetail");
-jest.mock("../useMaskedCall");
+jest.mock("../useCustomerCall");
 jest.mock("../../../hooks/useNetworkStatus", () => ({ useNetworkStatus: jest.fn(() => ({ meta: { readiness: "production_ready" }, networkState: "online", cacheState: "fresh", pendingDrafts: 0, syncState: "idle" })) }));
 
 import { useJobDetail } from "../useJobDetail";
-import { useMaskedCall } from "../useMaskedCall";
+import { useCustomerCall } from "../useCustomerCall";
 import { useNetworkStatus } from "../../../hooks/useNetworkStatus";
 
 const CONFIRM_LABEL = "I’ve spoken to them — confirm requirements";
@@ -27,7 +27,11 @@ const BASE_DETAIL: JobMobileDetailDTO = {
     workflow_status: "inspection_started", scheduled_date: "2026-07-31", scheduled_time_window: "12:30 PM",
     safe_locality: "Model Town, Ludhiana", is_terminal: false, booking_reference: "BK-1",
   },
-  customer: { customer_alias: "Customer HS-1044", call_relay_available: false, call_relay_reason: "CONTACT_RELAY_UNAVAILABLE", message_relay_available: false, message_relay_reason: "CONTACT_RELAY_UNAVAILABLE" },
+  customer: {
+    customer_alias: "Customer HS-1044", call_relay_available: false, call_relay_reason: "CONTACT_RELAY_UNAVAILABLE",
+    message_relay_available: false, message_relay_reason: "CONTACT_RELAY_UNAVAILABLE",
+    phone_call_available: true, phone_call_reason: null, call_count: 0, last_called_at: null, recent_call_times: [],
+  },
   workflow: { stages: [
     { key: "assigned", label: "Assigned", state: "completed", completed_at: null },
     { key: "inspection_started", label: "Inspection", state: "current", completed_at: null },
@@ -61,13 +65,8 @@ function baseHookReturn(overrides: Partial<ReturnType<typeof useJobDetail>> = {}
   };
 }
 
-function maskedCallReturn(overrides: Record<string, unknown> = {}) {
-  return {
-    contact: { can_call: true, cannot_call_reason: null, connected_before: false },
-    loading: false, calling: false, error: null,
-    placeCall: jest.fn(async () => null), refresh: jest.fn(),
-    ...overrides,
-  };
+function customerCallReturn(overrides: Record<string, unknown> = {}) {
+  return { calling: false, error: null, callCustomer: jest.fn(async () => true), ...overrides };
 }
 
 function renderScreen() {
@@ -77,7 +76,7 @@ function renderScreen() {
 beforeEach(() => {
   jest.clearAllMocks();
   (useNetworkStatus as jest.Mock).mockReturnValue({ meta: { readiness: "production_ready" }, networkState: "online", cacheState: "fresh", pendingDrafts: 0, syncState: "idle" });
-  (useMaskedCall as jest.Mock).mockReturnValue(maskedCallReturn());
+  (useCustomerCall as jest.Mock).mockReturnValue(customerCallReturn());
 });
 
 describe("JobDetailScreen — loaded state (spec sections 2, 5, 6)", () => {
@@ -211,9 +210,9 @@ describe("JobDetailScreen — actions (spec sections 6, 8, 17)", () => {
     });
   });
 
-  // The contact-first task must stay satisfiable where no telephony vendor is
-  // configured -- otherwise `can_call` is false forever and the job cannot
-  // leave `accepted`.
+  // Calling opens the phone dialer and is recorded; the task itself is
+  // completed by the confirmation, which must stay available even when there
+  // is no number to call -- otherwise the job could never leave `accepted`.
   describe("the contact-first task (`call-customer`)", () => {
     const CONTACT_DETAIL = {
       ...BASE_DETAIL,
@@ -230,26 +229,66 @@ describe("JobDetailScreen — actions (spec sections 6, 8, 17)", () => {
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    it("logs the contact so the job can move on when calling is not configured", async () => {
+    it("logs the contact so the job can move on when there is no number to call", async () => {
       const logCustomerContacted = jest.fn(async () => ({ ok: true as const }));
-      (useMaskedCall as jest.Mock).mockReturnValue(maskedCallReturn({
-        contact: { can_call: false, cannot_call_reason: "MASKED_CALLING_NOT_CONFIGURED", connected_before: false },
-      }));
-      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: CONTACT_DETAIL, logCustomerContacted }));
+      const noNumber = {
+        ...CONTACT_DETAIL,
+        customer: { ...CONTACT_DETAIL.customer, phone_call_available: false, phone_call_reason: "MASKED_CALLING_NO_CUSTOMER_NUMBER" },
+      };
+      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: noNumber, logCustomerContacted }));
       renderScreen();
       fireEvent.press(screen.getAllByText("Call Customer & Confirm Requirements")[0]);
+      expect(screen.getAllByText("No contact number on file for this customer.").length).toBeGreaterThan(0);
       fireEvent.press(screen.getByText(CONFIRM_LABEL));
       await waitFor(() => expect(logCustomerContacted).toHaveBeenCalled());
     });
 
-    it("places the platform call when calling is available", async () => {
-      const placeCall = jest.fn(async () => null);
-      (useMaskedCall as jest.Mock).mockReturnValue(maskedCallReturn({ placeCall }));
-      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: CONTACT_DETAIL }));
+    it("records the call and opens the dialer from the sheet, without completing the task", async () => {
+      const callCustomer = jest.fn(async () => true);
+      const logCustomerContacted = jest.fn(async () => ({ ok: true as const }));
+      (useCustomerCall as jest.Mock).mockReturnValue(customerCallReturn({ callCustomer }));
+      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: CONTACT_DETAIL, logCustomerContacted }));
       renderScreen();
       fireEvent.press(screen.getAllByText("Call Customer & Confirm Requirements")[0]);
       fireEvent.press(screen.getByText("Call the customer now"));
-      await waitFor(() => expect(placeCall).toHaveBeenCalled());
+      await waitFor(() => expect(callCustomer).toHaveBeenCalledTimes(1));
+      expect(logCustomerContacted).not.toHaveBeenCalled();
+    });
+
+    it("calls from the customer card too", async () => {
+      const callCustomer = jest.fn(async () => true);
+      (useCustomerCall as jest.Mock).mockReturnValue(customerCallReturn({ callCustomer }));
+      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: CONTACT_DETAIL }));
+      renderScreen();
+      expect(screen.getByText("Not called yet")).toBeTruthy();
+      fireEvent.press(screen.getByText("Call customer"));
+      await waitFor(() => expect(callCustomer).toHaveBeenCalledTimes(1));
+    });
+
+    it("shows when the customer was last called, from the backend's record", () => {
+      const called = {
+        ...CONTACT_DETAIL,
+        customer: {
+          ...CONTACT_DETAIL.customer, call_count: 2, last_called_at: "2026-09-14T06:02:00Z",
+          recent_call_times: ["2026-09-14T06:02:00Z", "2026-09-14T05:58:00Z"],
+        },
+      };
+      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: called }));
+      renderScreen();
+      expect(screen.getByText("Called 2 times · last")).toBeTruthy();
+      expect(screen.getByText(new Date("2026-09-14T06:02:00Z").toLocaleString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      }))).toBeTruthy();
+      expect(screen.getByText("Call again")).toBeTruthy();
+      fireEvent.press(screen.getAllByText("Call Customer & Confirm Requirements")[0]);
+      expect(screen.getByText("Call the customer again")).toBeTruthy();
+    });
+
+    it("shows a call error instead of failing silently", () => {
+      (useCustomerCall as jest.Mock).mockReturnValue(customerCallReturn({ error: "Couldn't open the phone dialer on this device." }));
+      (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: CONTACT_DETAIL }));
+      renderScreen();
+      expect(screen.getByText("Couldn't open the phone dialer on this device.")).toBeTruthy();
     });
   });
 

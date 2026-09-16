@@ -22,6 +22,22 @@ export interface CustomerContactDTO {
   call_relay_reason: string | null;
   message_relay_available: boolean;
   message_relay_reason: string | null;
+  /** Whether POST .../customer-call can return a number to dial. */
+  phone_call_available: boolean;
+  phone_call_reason: string | null;
+  /** Every tap on Call is recorded by the backend; newest first. */
+  call_count: number;
+  last_called_at: string | null;
+  recent_call_times: string[];
+}
+
+/** POST /v1/staff/service-jobs/{job_id}/customer-call */
+export interface CustomerCallDTO {
+  job_id: string;
+  customer_phone: string;
+  called_at: string;
+  call_count: number;
+  recent_call_times: string[];
 }
 
 export type WorkflowStageState = "completed" | "current" | "upcoming" | "blocked" | "skipped";
