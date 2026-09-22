@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "../../services/completionProof/completionProofApi";
+import { saveChecklistItemResponse } from "../../services/inspection/inspectionApi";
 import { uploadChecklistEvidence } from "../../services/media/mediaApi";
 import { AppError } from "../../services/api/types";
 
@@ -17,6 +18,8 @@ export function useCompletionProof(jobId: string) {
   const [mutating, setMutating] = useState(false);
   const [mutationError, setMutationError] = useState<AppError | null>(null);
   const [uploadingCategory, setUploadingCategory] = useState<"before" | "after" | null>(null);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: key,
@@ -69,6 +72,39 @@ export function useCompletionProof(jobId: string) {
   const saveDraft = useCallback((body: { resolution_summary?: string; final_service_notes?: string }) =>
     runMutation(() => api.saveDraft(jobId, body)), [runMutation, jobId]);
 
+  const saveFinalCheck = useCallback(async (
+    instanceId: string, itemId: string,
+    responseValue: Record<string, unknown> | null,
+    evidence: { file_id: string }[] | null,
+  ) => {
+    // Only the SAME item is guarded: a blanket "one save at a time" dropped
+    // the technician's answer to a second check while the first was still
+    // saving, and nothing retried it.
+    if (savingItemId === itemId) return { ok: false as const };
+    setSavingItemId(itemId);
+    try {
+      return await runMutation(() => saveChecklistItemResponse(instanceId, itemId, responseValue, evidence));
+    } finally {
+      setSavingItemId(null);
+    }
+  }, [savingItemId, runMutation]);
+
+  const uploadFinalCheckEvidence = useCallback(async (itemId: string, fileUri: string, fileName: string, mimeType: string) => {
+    if (uploadingItemId) return { ok: false as const };
+    setUploadingItemId(itemId);
+    setMutationError(null);
+    try {
+      const result = await uploadChecklistEvidence(jobId, fileUri, fileName, mimeType);
+      if (!result.ok) {
+        setMutationError(result.error);
+        return { ok: false as const, error: result.error };
+      }
+      return { ok: true as const, fileId: result.data.id };
+    } finally {
+      setUploadingItemId(null);
+    }
+  }, [uploadingItemId, jobId]);
+
   const removeEvidence = useCallback((category: "before" | "after", fileId: string) =>
     runMutation(() => api.removeEvidence(jobId, category, fileId)), [runMutation, jobId]);
 
@@ -99,7 +135,7 @@ export function useCompletionProof(jobId: string) {
     error: query.error as AppError | null,
     isRefetching: query.isRefetching,
     refetch: query.refetch,
-    mutating, mutationError, uploadingCategory,
-    saveDraft, addEvidenceFromUpload, removeEvidence, submit, requestHandover, sendReminder, markCustomerUnavailable,
+    mutating, mutationError, uploadingCategory, savingItemId, uploadingItemId,
+    saveDraft, saveFinalCheck, uploadFinalCheckEvidence, addEvidenceFromUpload, removeEvidence, submit, requestHandover, sendReminder, markCustomerUnavailable,
   };
 }

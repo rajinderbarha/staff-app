@@ -28,8 +28,10 @@ function categoryFor(code: AppErrorCode): AppErrorCategory {
     case "ROLE_NOT_ALLOWED": case "CAPABILITY_REQUIRED": case "ENTITY_NOT_ASSIGNED": case "ACTION_NOT_ALLOWED":
     case "VERTICAL_DISABLED":
       return "permission";
-    case "VALIDATION_ERROR": case "JOB_TYPE_CONTEXT_UNRESOLVED":
+    case "VALIDATION_ERROR": case "JOB_TYPE_CONTEXT_UNRESOLVED": case "INVALID_CREDENTIALS":
       return "validation";
+    case "RESOURCE_NOT_FOUND":
+      return "unknown";
     case "CONFLICT": case "STALE_ENTITY_VERSION": case "STALE_WORKFLOW_VERSION": case "QUOTE_NOT_CURRENT":
     case "APPROVED_ESTIMATE_IMMUTABLE":
       return "conflict";
@@ -55,7 +57,13 @@ const RETRYABLE_CODES = new Set<AppErrorCode>([
 function mapBackendCode(code: string, context: ErrorMapperContext): AppErrorCode {
   switch (code) {
     case "UNAUTHORIZED":
-      return "AUTH_REQUIRED";
+      // The backend answers 401 UNAUTHORIZED both for "no/!valid bearer
+      // token" and for "the password in your request body is wrong"
+      // (change password, disable MFA). On an authenticated call the token
+      // was accepted -- a genuinely bad one comes back as INVALID_TOKEN /
+      // TOKEN_BLACKLISTED / SESSION_REVOKED -- so treating this as a session
+      // failure signed the technician out for mistyping their password.
+      return context === "authenticated" ? "INVALID_CREDENTIALS" : "AUTH_REQUIRED";
     case "INVALID_TOKEN":
       return context === "refresh" ? "REFRESH_TOKEN_EXPIRED" : "ACCESS_TOKEN_EXPIRED";
     case "TOKEN_EXPIRED":
@@ -82,6 +90,10 @@ function mapBackendCode(code: string, context: ErrorMapperContext): AppErrorCode
     case "CONFLICT":
       return "CONFLICT";
     case "NOT_FOUND":
+      // A missing RECORD is not a missing session. Mapping every 404 to an
+      // auth failure signed the technician out whenever they opened a job,
+      // photo or notification that had since been removed.
+      return "RESOURCE_NOT_FOUND";
     case "TENANT_NOT_FOUND":
       return "SESSION_NOT_FOUND";
     // The exact strings the execution engine raises verbatim (confirmed

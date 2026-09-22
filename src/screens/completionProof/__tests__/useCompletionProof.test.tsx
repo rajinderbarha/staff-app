@@ -5,9 +5,11 @@ import { useCompletionProof } from "../useCompletionProof";
 
 jest.mock("../../../services/completionProof/completionProofApi");
 jest.mock("../../../services/media/mediaApi");
+jest.mock("../../../services/inspection/inspectionApi");
 
 import * as api from "../../../services/completionProof/completionProofApi";
 import * as mediaApi from "../../../services/media/mediaApi";
+import * as inspectionApi from "../../../services/inspection/inspectionApi";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -47,6 +49,26 @@ describe("useCompletionProof (spec sections 12, 13, 17)", () => {
 
     expect(mediaApi.uploadChecklistEvidence).toHaveBeenCalledWith("j1", "file://x.jpg", "x.jpg", "image/jpeg");
     expect(api.addEvidence).toHaveBeenCalledWith("j1", "after", "media1");
+  });
+
+  it("saves a completion final check through the checklist endpoint and refreshes the proof", async () => {
+    (api.getCompletionProofDetail as jest.Mock).mockResolvedValue({ ok: true, data: { job: { job_id: "j1" }, proof: { status: "draft" } } });
+    (inspectionApi.saveChecklistItemResponse as jest.Mock).mockResolvedValue({ ok: true, data: {} });
+    const { result } = renderHook(() => useCompletionProof("j1"), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(async () => { await result.current.saveFinalCheck("instance1", "check1", { value: "yes" }, null); });
+    expect(inspectionApi.saveChecklistItemResponse).toHaveBeenCalledWith("instance1", "check1", { value: "yes" }, null);
+    expect((api.getCompletionProofDetail as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("uploads final-check evidence without attaching it to before/after photos", async () => {
+    (api.getCompletionProofDetail as jest.Mock).mockResolvedValue({ ok: true, data: { job: { job_id: "j1" }, proof: { status: "draft" } } });
+    (mediaApi.uploadChecklistEvidence as jest.Mock).mockResolvedValue({ ok: true, data: { id: "check-photo" } });
+    const { result } = renderHook(() => useCompletionProof("j1"), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(async () => { expect(await result.current.uploadFinalCheckEvidence("check1", "file://x.jpg", "x.jpg", "image/jpeg")).toEqual({ ok: true, fileId: "check-photo" }); });
+    expect(mediaApi.uploadChecklistEvidence).toHaveBeenCalledWith("j1", "file://x.jpg", "x.jpg", "image/jpeg");
+    expect(api.addEvidence).not.toHaveBeenCalled();
   });
 
   it("guards against a duplicate mutation while one is in flight", async () => {

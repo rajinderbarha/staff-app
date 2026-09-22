@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
 import { ThemeProvider } from "../../../design-system/themes";
 import { CompletionProofScreen } from "../CompletionProofScreen";
 import { CompletionProofDetailDTO } from "../../../services/completionProof/types";
@@ -13,6 +13,7 @@ jest.mock("expo-image-picker", () => ({
 
 import { useCompletionProof } from "../useCompletionProof";
 import { useNetworkStatus } from "../../../hooks/useNetworkStatus";
+import * as ImagePicker from "expo-image-picker";
 
 const mockNavigate = jest.fn();
 const navigation = { navigate: mockNavigate } as any;
@@ -29,9 +30,9 @@ const BASE_DETAIL: CompletionProofDetailDTO = {
   definition: {
     customer_handover_required: true,
     final_checks: [
-      { id: "c1", checklist_section_id: "s1", item_type: "YES_NO", label: "Cooling tested", help_text: null, is_required: true, evidence_required: false, min_evidence_count: 0, max_evidence_count: 1, allowed_file_types: null, measurement_unit: null, select_options: null, validation_rules: null, display_order: 0, condition_rules: null, failure_behavior: null, customer_visible: false, response: { id: "r1", job_checklist_instance_id: "i1", checklist_item_id: "c1", response_value: { value: "yes" }, evidence: null, validation_result: null } },
-      { id: "c2", checklist_section_id: "s1", item_type: "YES_NO", label: "Customer shown completed work", help_text: null, is_required: true, evidence_required: false, min_evidence_count: 0, max_evidence_count: 1, allowed_file_types: null, measurement_unit: null, select_options: null, validation_rules: null, display_order: 1, condition_rules: null, failure_behavior: null, customer_visible: false, response: null },
-    ] as any,
+      { id: "c1", instance_id: "i1", checklist_section_id: "s1", item_type: "YES_NO", label: "Cooling tested", help_text: null, is_required: true, evidence_required: false, min_evidence_count: 0, max_evidence_count: 1, allowed_file_types: null, measurement_unit: null, select_options: null, validation_rules: null, display_order: 0, condition_rules: null, failure_behavior: null, customer_visible: false, response: { id: "r1", job_checklist_instance_id: "i1", checklist_item_id: "c1", response_value: { value: "yes" }, evidence: null, validation_result: null } },
+      { id: "c2", instance_id: "i1", checklist_section_id: "s1", item_type: "YES_NO", label: "Customer shown completed work", help_text: null, is_required: true, evidence_required: false, min_evidence_count: 0, max_evidence_count: 1, allowed_file_types: null, measurement_unit: null, select_options: null, validation_rules: null, display_order: 1, condition_rules: null, failure_behavior: null, customer_visible: false, response: null },
+    ],
   },
   parts_used: [
     { parts_request_id: "p1", part_name: "Refrigerant gas", quantity: 1, estimated_cost: 800, status: "installed" },
@@ -45,8 +46,10 @@ const BASE_DETAIL: CompletionProofDetailDTO = {
 function baseHookReturn(overrides: Partial<ReturnType<typeof useCompletionProof>> = {}) {
   return {
     data: BASE_DETAIL, isLoading: false, isError: false, error: null, isRefetching: false, refetch: jest.fn(),
-    mutating: false, mutationError: null, uploadingCategory: null,
+    mutating: false, mutationError: null, uploadingCategory: null, savingItemId: null, uploadingItemId: null,
     saveDraft: jest.fn(async () => ({ ok: true as const })),
+    saveFinalCheck: jest.fn(async () => ({ ok: true as const })),
+    uploadFinalCheckEvidence: jest.fn(async () => ({ ok: true as const, fileId: "file1" })),
     addEvidenceFromUpload: jest.fn(async () => ({ ok: true as const })),
     removeEvidence: jest.fn(async () => ({ ok: true as const })),
     submit: jest.fn(async () => ({ ok: true as const })),
@@ -160,6 +163,66 @@ describe("CompletionProofScreen — submitted / handover (spec section 10)", () 
     fireEvent.press(screen.getByText("Request"));
     expect(requestHandover).toHaveBeenCalled();
     expect(screen.queryByText("Customer accepted")).toBeNull();
+  });
+
+  it("saves an unanswered required final check and enables Submit after the authoritative refresh", async () => {
+    const saveFinalCheck = jest.fn(async () => ({ ok: true as const }));
+    const submit = jest.fn(async () => ({ ok: true as const }));
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ saveFinalCheck, submit }));
+    const view = renderScreen();
+    fireEvent(screen.getByLabelText("No"), "valueChange", true);
+    await waitFor(() => expect(saveFinalCheck).toHaveBeenCalledWith("i1", "c2", { value: "yes" }, null));
+    expect(submit).not.toHaveBeenCalled();
+    const detail = { ...BASE_DETAIL, readiness: { ...BASE_DETAIL.readiness, can_submit: true, missing_check_ids: [], blockers: [] }, allowed_actions: ["save_draft", "submit_proof"] };
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, saveFinalCheck, submit }));
+    view.rerender(<ThemeProvider><CompletionProofScreen route={route} navigation={navigation} /></ThemeProvider>);
+    fireEvent.press(screen.getByText("Submit completion proof"));
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("stages two required photos before saving their checklist response", async () => {
+    const check = { ...BASE_DETAIL.definition.final_checks[1], item_type: "PHOTO" as const, evidence_required: true, min_evidence_count: 2, max_evidence_count: 3 };
+    const detail = { ...BASE_DETAIL, definition: { ...BASE_DETAIL.definition, final_checks: [check] } };
+    const saveFinalCheck = jest.fn(async () => ({ ok: true as const }));
+    const uploadFinalCheckEvidence = jest.fn()
+      .mockResolvedValueOnce({ ok: true, fileId: "photo1" })
+      .mockResolvedValueOnce({ ok: true, fileId: "photo2" });
+    (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: false, assets: [{ uri: "file://photo.jpg", fileName: "photo.jpg", mimeType: "image/jpeg" }] });
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, saveFinalCheck, uploadFinalCheckEvidence }));
+    renderScreen();
+    fireEvent.press(screen.getAllByLabelText("Add photo")[0]);
+    await waitFor(() => expect(uploadFinalCheckEvidence).toHaveBeenCalledTimes(1));
+    expect(saveFinalCheck).not.toHaveBeenCalled();
+    fireEvent.press(screen.getAllByLabelText("Add photo")[0]);
+    await waitFor(() => expect(saveFinalCheck).toHaveBeenCalledWith("i1", "c2", { attached: true }, [{ file_id: "photo1" }, { file_id: "photo2" }]));
+  });
+
+  it("accepts a typed technician attestation for a required signature check", async () => {
+    const check = { ...BASE_DETAIL.definition.final_checks[1], item_type: "SIGNATURE" as const };
+    const detail = { ...BASE_DETAIL, definition: { ...BASE_DETAIL.definition, final_checks: [check] } };
+    const saveFinalCheck = jest.fn(async () => ({ ok: true as const }));
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, saveFinalCheck }));
+    renderScreen();
+    const input = screen.getByPlaceholderText("Technician full name");
+    fireEvent.changeText(input, "Asha Kumar");
+    fireEvent(input, "blur");
+    await waitFor(() => expect(saveFinalCheck).toHaveBeenCalledWith("i1", "c2", { value: "Asha Kumar", format: "typed_name" }, null));
+  });
+
+  it("waits for required signed-document evidence before saving a typed attestation", async () => {
+    const check = { ...BASE_DETAIL.definition.final_checks[1], item_type: "SIGNATURE" as const, evidence_required: true, min_evidence_count: 1 };
+    const detail = { ...BASE_DETAIL, definition: { ...BASE_DETAIL.definition, final_checks: [check] } };
+    const saveFinalCheck = jest.fn(async () => ({ ok: true as const }));
+    const uploadFinalCheckEvidence = jest.fn(async () => ({ ok: true as const, fileId: "signed-document" }));
+    (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({ canceled: false, assets: [{ uri: "file://signed.jpg", fileName: "signed.jpg", mimeType: "image/jpeg" }] });
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, saveFinalCheck, uploadFinalCheckEvidence }));
+    renderScreen();
+    const input = screen.getByPlaceholderText("Technician full name");
+    fireEvent.changeText(input, "Asha Kumar");
+    fireEvent(input, "blur");
+    expect(saveFinalCheck).not.toHaveBeenCalled();
+    fireEvent.press(screen.getAllByLabelText("Add photo")[0]);
+    await waitFor(() => expect(saveFinalCheck).toHaveBeenCalledWith("i1", "c2", { value: "Asha Kumar", format: "typed_name" }, [{ file_id: "signed-document" }]));
   });
 
   it("continues to payment after a handover request succeeds", async () => {

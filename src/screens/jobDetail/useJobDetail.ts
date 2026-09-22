@@ -54,6 +54,10 @@ export function useJobDetail(jobId: string) {
   }, [mutating, queryClient, queryKey]);
 
   const acceptJob = useCallback(() => runMutation(() => jobDetailApi.acceptJob(jobId)), [runMutation, jobId]);
+  const rejectJob = useCallback(
+    (reason: string) => runMutation(() => jobDetailApi.rejectJob(jobId, reason)),
+    [runMutation, jobId],
+  );
   const startTravel = useCallback(() => runMutation(() => jobDetailApi.startTravel(jobId)), [runMutation, jobId]);
   const markArrived = useCallback(() => runMutation(() => jobDetailApi.markArrived(jobId)), [runMutation, jobId]);
   const logCustomerContacted = useCallback(() => runMutation(() => jobDetailApi.logCustomerContacted(jobId)), [runMutation, jobId]);
@@ -69,6 +73,7 @@ export function useJobDetail(jobId: string) {
     mutating,
     mutationError,
     acceptJob,
+    rejectJob,
     startTravel,
     markArrived,
     logCustomerContacted,

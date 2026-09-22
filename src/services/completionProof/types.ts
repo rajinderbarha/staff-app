@@ -35,7 +35,8 @@ export interface CompletionProofDTO {
 }
 
 export interface CompletionProofDefinitionDTO {
-  final_checks: ChecklistItemDTO[];
+  /** The completion projection includes the checklist instance to write to. */
+  final_checks: (ChecklistItemDTO & { instance_id: string })[];
   customer_handover_required: boolean;
 }
 

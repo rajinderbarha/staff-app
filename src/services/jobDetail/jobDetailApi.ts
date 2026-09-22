@@ -24,6 +24,14 @@ export function acceptJob(jobId: string): Promise<ApiResult<Record<string, unkno
   return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/accept`, { method: "POST", unsafeToRetry: true });
 }
 
+/** Decline a job assigned to me. The job returns to the provider for
+ *  reassignment -- it is never cancelled by a technician saying no. */
+export function rejectJob(jobId: string, reason: string): Promise<ApiResult<Record<string, unknown>>> {
+  return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/reject`, {
+    method: "POST", body: { reason }, unsafeToRetry: true,
+  });
+}
+
 export function startTravel(jobId: string): Promise<ApiResult<Record<string, unknown>>> {
   return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/on-the-way`, { method: "POST", unsafeToRetry: true });
 }

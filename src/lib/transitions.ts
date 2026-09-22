@@ -13,16 +13,27 @@ export type JobAction =
   | "accept" | "reject" | "onTheWay" | "reachedSite" | "startInspection"
   | "completeInspection" | "startService" | "workDone" | "complete";
 
+/**
+ * Reference only: the BACKEND decides the next action
+ * (`_NEXT_ACTION_BY_STATUS` + the work-start gate, projected as
+ * `next_required_action`), and Job Detail renders that. This map is kept in
+ * step with it so nothing here can teach a wrong sequence -- it previously
+ * offered "complete" straight out of `service_started` and `quote_required`,
+ * which the backend refuses (work must be marked done first, and an
+ * unanswered estimate has no technician action at all).
+ */
 export const NEXT_ACTION: Record<string, JobAction[]> = {
   assigned:            ["accept", "reject"],
   accepted:            ["onTheWay"],
+  scheduled:           ["onTheWay"],
   on_the_way:          ["reachedSite"],
-  reached_site:        ["startInspection"],
+  reached_site:        ["startInspection", "startService"],
   inspection_started:  ["completeInspection"],
   inspection_done:     ["startService"],
-  service_started:     ["workDone", "complete"],
+  quote_required:      [],
+  service_started:     ["workDone"],
   work_done:           ["complete"],
-  quote_required:      ["complete"],
+  customer_not_available: [],
 };
 
 export const ACTION_LABEL: Record<JobAction, string> = {
@@ -45,6 +56,8 @@ export const STATUS_LABEL: Record<string, string> = {
   quote_required:"Quote Required", service_started:"In Service", work_done:"Work Done",
   customer_not_available:"Customer Not Available", completed:"Completed",
   cancelled:"Cancelled", failed:"Failed",
+  closed_estimate_declined:"Estimate Declined", force_closed:"Force Closed",
+  voided:"Voided",
 };
 
 export const STATUS_COLOR: Record<string, { bg:string; text:string; border:string }> = {

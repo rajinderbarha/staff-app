@@ -60,7 +60,8 @@ eas build --platform all --profile production
 ## Environment
 
 ```env
-EXPO_PUBLIC_API_URL=https://api.serviceos.in
+EXPO_PUBLIC_ENV=production
+EXPO_PUBLIC_API_BASE_URL=https://api.serviceos.in
 ```
 
 ## Tests
@@ -75,14 +76,18 @@ npm test -- --runInBand
 # 1. Copy env file
 cp .env.example .env
 
-# 2. For simulator/emulator — default works:
-EXPO_PUBLIC_API_URL=http://localhost:8000
+# 2. For iOS simulator or web on the backend machine:
+EXPO_PUBLIC_ENV=local
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
 
-# 3. For physical device — use your computer's local IP:
+# 3. For Android emulator, use the host-loopback address instead:
+EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8000
+
+# 4. For physical device — use your computer's local IP:
 #    Find it: ipconfig (Windows) | ifconfig (Mac) | ip addr (Linux)
-EXPO_PUBLIC_API_URL=http://192.168.1.100:8000
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.100:8000
 
-# 4. Start backend, then app
+# 5. Start backend, then app
 uvicorn app.main:app --host 0.0.0.0 --port 8000   # --host 0.0.0.0 for device access
 cd mobile/staff-app && npx expo start
 ```

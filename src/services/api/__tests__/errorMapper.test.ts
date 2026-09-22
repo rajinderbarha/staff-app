@@ -9,8 +9,25 @@ function problem(overrides: Partial<ProblemDetailBody> = {}): ProblemDetailBody 
 }
 
 describe("mapProblemDetail — every required category (spec section 10)", () => {
-  it("UNAUTHORIZED -> AUTH_REQUIRED", () => {
-    expect(mapProblemDetail(problem(), "authenticated").code).toBe("AUTH_REQUIRED");
+  it("UNAUTHORIZED on a public call -> AUTH_REQUIRED", () => {
+    expect(mapProblemDetail(problem(), "public").code).toBe("AUTH_REQUIRED");
+  });
+
+  // The backend uses 401 UNAUTHORIZED for BOTH "no valid bearer token" and
+  // "the password in this request body is wrong". On an authenticated call
+  // the token was accepted, so this is the password -- treating it as a dead
+  // session signed the technician out for a typo in Change Password.
+  it("UNAUTHORIZED on an authenticated call -> INVALID_CREDENTIALS, not a sign-out", () => {
+    const mapped = mapProblemDetail(problem(), "authenticated");
+    expect(mapped.code).toBe("INVALID_CREDENTIALS");
+    expect(mapped.category).toBe("validation");
+  });
+
+  // A record that is gone is not a session that is gone.
+  it("NOT_FOUND -> RESOURCE_NOT_FOUND, never an auth failure", () => {
+    const mapped = mapProblemDetail(problem({ error_code: "NOT_FOUND", status: 404 }), "authenticated");
+    expect(mapped.code).toBe("RESOURCE_NOT_FOUND");
+    expect(mapped.category).not.toBe("auth");
   });
 
   it("INVALID_TOKEN on an authenticated request -> ACCESS_TOKEN_EXPIRED", () => {

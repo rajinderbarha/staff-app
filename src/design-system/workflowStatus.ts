@@ -32,6 +32,10 @@ export const WORKFLOW_STATUS_MAP: Record<string, WorkflowStatusEntry> = {
   cancelled:           { label: "Cancelled",            tone: "cancelled", description: "This job was cancelled." },
   failed:              { label: "Failed",               tone: "cancelled", description: "This job could not be completed." },
   closed_estimate_declined: { label: "Estimate Declined", tone: "cancelled", description: "The customer declined the estimate. This job is closed." },
+  // Admin-only terminal outcomes (execution/constants.py). Without them the
+  // app showed "Unknown Status -- contact support" on a real, closed job.
+  force_closed: { label: "Force Closed", tone: "cancelled", description: "An administrator closed this job." },
+  voided: { label: "Voided", tone: "cancelled", description: "An administrator voided this job." },
 };
 
 const SAFE_FALLBACK: WorkflowStatusEntry = {

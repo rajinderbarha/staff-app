@@ -111,14 +111,26 @@ export function SessionProvider({ children, adapter = secureStoreSessionAdapter 
     [isRestoring, accessContext],
   );
 
+  const invalidatingRef = useRef(false);
+
   const invalidateSession = useCallback(async () => {
-    // Cancel + drop everything first so no protected data lingers in cache
-    // for the instant between "session invalid" and "navigation reset".
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await adapter.clearSession();
-    setAccessContextState(UNAUTHENTICATED_CONTEXT);
-    resetRoot({ index: 0, routes: [{ name: "AuthStack" }] });
+    // Re-entrancy guard: clearing the session emits SESSION_CLEARED, and the
+    // subscriber below calls straight back in here. Without this the app
+    // looped -- the login screen remounted several times a second and
+    // hammered the API until the process was killed.
+    if (invalidatingRef.current) return;
+    invalidatingRef.current = true;
+    try {
+      // Cancel + drop everything first so no protected data lingers in cache
+      // for the instant between "session invalid" and "navigation reset".
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      await adapter.clearSession();
+      setAccessContextState(UNAUTHENTICATED_CONTEXT);
+      resetRoot({ index: 0, routes: [{ name: "AuthStack" }] });
+    } finally {
+      invalidatingRef.current = false;
+    }
   }, [adapter, queryClient]);
 
   const setAccessContext = useCallback((context: AccessContext) => {

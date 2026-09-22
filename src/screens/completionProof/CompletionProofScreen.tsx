@@ -7,11 +7,13 @@ import { SafeAreaScreen } from "../../design-system/components/foundation/SafeAr
 import { Card, Section } from "../../design-system/components/foundation/Layout";
 import { AppText } from "../../design-system/components/typography/AppText";
 import { IconButton } from "../../design-system/components/actions/IconButton";
+import { TextField } from "../../design-system/components/forms/TextField";
 import { TextArea } from "../../design-system/components/forms/TextArea";
-import { Skeleton } from "../../design-system/components/feedback/Loading";
+import { Skeleton, LoadingSpinner } from "../../design-system/components/feedback/Loading";
 import { ErrorState } from "../../design-system/components/feedback/States";
 import { InlineAlert } from "../../design-system/components/feedback/Banner";
 import { PrimaryButton, SecondaryButton } from "../../design-system/components/actions/Buttons";
+import { AttachmentThumbnail } from "../../design-system/components/data-display/AttachmentThumbnail";
 import { ChecklistItemRow } from "../inspection/components/ChecklistItemRow";
 import { WorkFinishedBanner } from "./components/WorkFinishedBanner";
 import { EvidenceGrid } from "./components/EvidenceGrid";
@@ -20,6 +22,53 @@ import { CustomerHandoverCard } from "./components/CustomerHandoverCard";
 import { useCompletionProof } from "./useCompletionProof";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { CompletionProofDefinitionDTO } from "../../services/completionProof/types";
+
+type FinalCheck = CompletionProofDefinitionDTO["final_checks"][number];
+
+/** A typed technician attestation is explicit; it is not presented as a
+ * handwritten customer signature. The checklist API stores the same response
+ * shape as other checks, and a configured photo requirement is still enforced. */
+function SignatureFinalCheck({ item, disabled, saving, uploading, evidence, onSave, onPickEvidence }: {
+  item: FinalCheck;
+  disabled: boolean;
+  saving: boolean;
+  uploading: boolean;
+  evidence: { file_id: string }[];
+  onSave: (value: Record<string, unknown> | null, evidence: { file_id: string }[] | null) => void;
+  onPickEvidence: () => Promise<{ ok: boolean; fileId?: string }>;
+}) {
+  const { theme } = useTheme();
+  const existingName = item.response?.response_value?.value;
+  const [name, setName] = useState(typeof existingName === "string" ? existingName : "");
+  return (
+    <View style={{ paddingVertical: theme.spacing.base, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle }}>
+      <AppText variant="bodyStrong">{item.label}{item.is_required ? " · Required" : ""}</AppText>
+      {item.help_text ? <AppText variant="caption" color="tertiary">{item.help_text}</AppText> : null}
+      <AppText variant="caption" color="tertiary">Type your full name to attest to this final check.</AppText>
+      <TextField
+        value={name}
+        onChangeText={setName}
+        onBlur={() => { if (!disabled && name.trim()) onSave({ value: name.trim(), format: "typed_name" }, null); }}
+        editable={!disabled}
+        placeholder="Technician full name"
+      />
+      {item.evidence_required ? (
+        <View style={{ marginTop: theme.spacing.sm }}>
+          <AppText variant="caption" color="tertiary">Attach a photo of the signed document ({evidence.length} of {Math.max(item.min_evidence_count, 1)} required).</AppText>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm }}>
+            {evidence.map(file => <AttachmentThumbnail key={file.file_id} label="Signature evidence" />)}
+            {!disabled && (uploading ? <LoadingSpinner /> : <AttachmentThumbnail label="Add photo" onPress={async () => {
+              const result = await onPickEvidence();
+              if (result.ok && result.fileId) onSave(name.trim() ? { value: name.trim(), format: "typed_name" } : null, [...evidence, { file_id: result.fileId }]);
+            }} />)}
+          </View>
+        </View>
+      ) : null}
+      {saving ? <LoadingSpinner /> : null}
+    </View>
+  );
+}
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "CompletionProof">;
 
@@ -36,12 +85,13 @@ export function CompletionProofScreen({ route, navigation }: Props) {
 
   const [resolutionSummary, setResolutionSummary] = useState<string | null>(null);
   const [serviceNotes, setServiceNotes] = useState<string | null>(null);
-  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [pendingEvidence, setPendingEvidence] = useState<Record<string, { file_id: string }[]>>({});
+  const [pendingResponses, setPendingResponses] = useState<Record<string, Record<string, unknown> | null>>({});
 
   const {
     data, isLoading, isError, error, isRefetching, refetch,
-    mutating, mutationError, uploadingCategory,
-    saveDraft, addEvidenceFromUpload, removeEvidence, submit, requestHandover, sendReminder, markCustomerUnavailable,
+    mutating, mutationError, uploadingCategory, savingItemId, uploadingItemId,
+    saveDraft, saveFinalCheck, uploadFinalCheckEvidence, addEvidenceFromUpload, removeEvidence, submit, requestHandover, sendReminder, markCustomerUnavailable,
   } = useCompletionProof(jobId);
 
   const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
@@ -75,6 +125,39 @@ export function CompletionProofScreen({ route, navigation }: Props) {
     const asset = result.assets[0];
     await addEvidenceFromUpload(category, asset.uri, asset.fileName ?? "evidence.jpg", asset.mimeType ?? "image/jpeg");
   }, [addEvidenceFromUpload]);
+
+  const handlePickFinalCheckEvidence = useCallback(async (itemId: string): Promise<{ ok: boolean; fileId?: string }> => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) return { ok: false };
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+    if (result.canceled || !result.assets?.[0]) return { ok: false };
+    const asset = result.assets[0];
+    const upload = await uploadFinalCheckEvidence(itemId, asset.uri, asset.fileName ?? "final-check.jpg", asset.mimeType ?? "image/jpeg");
+    return upload.ok ? { ok: true, fileId: upload.fileId } : { ok: false };
+  }, [uploadFinalCheckEvidence]);
+
+  const handleSaveFinalCheck = useCallback(async (
+    item: FinalCheck, responseValue: Record<string, unknown> | null, evidence: { file_id: string }[] | null,
+  ) => {
+    const mergedEvidence = [...new Map([
+      ...(item.response?.evidence ?? []), ...(pendingEvidence[item.id] ?? []), ...(evidence ?? []),
+    ].map(file => [file.file_id, { file_id: file.file_id }])).values()];
+    const value = responseValue ?? pendingResponses[item.id] ?? item.response?.response_value ?? null;
+    const minimum = item.evidence_required ? Math.max(item.min_evidence_count, 1) : 0;
+    if (mergedEvidence.length < minimum || value === null || Object.keys(value).length === 0) {
+      setPendingEvidence(previous => ({ ...previous, [item.id]: mergedEvidence }));
+      if (responseValue) setPendingResponses(previous => ({ ...previous, [item.id]: responseValue }));
+      return;
+    }
+    const saved = await saveFinalCheck(item.instance_id, item.id, value, mergedEvidence.length ? mergedEvidence : null);
+    if (saved.ok) {
+      setPendingEvidence(previous => { const next = { ...previous }; delete next[item.id]; return next; });
+      setPendingResponses(previous => { const next = { ...previous }; delete next[item.id]; return next; });
+    } else {
+      setPendingEvidence(previous => ({ ...previous, [item.id]: mergedEvidence }));
+      setPendingResponses(previous => ({ ...previous, [item.id]: value }));
+    }
+  }, [pendingEvidence, pendingResponses, saveFinalCheck]);
 
   if (isLoading) {
     return (
@@ -159,15 +242,38 @@ export function CompletionProofScreen({ route, navigation }: Props) {
           <Section>
             <AppText variant="title" style={{ marginBottom: theme.spacing.xs }}>Final checks</AppText>
             <Card padding="base">
-              {data.definition.final_checks.map(item => (
-                <ChecklistItemRow
+              {data.definition.final_checks.map(item => item.item_type === "SIGNATURE" ? (
+                <SignatureFinalCheck
                   key={item.id}
                   item={item}
                   disabled={!isEditable}
                   saving={savingItemId === item.id}
-                  uploading={false}
-                  onSave={() => {}}
-                  onPickEvidence={async () => ({ ok: false })}
+                  uploading={uploadingItemId === item.id}
+                  evidence={[...new Map([...(item.response?.evidence ?? []), ...(pendingEvidence[item.id] ?? [])].map(file => [file.file_id, { file_id: file.file_id }])).values()]}
+                  onSave={(value, evidence) => { void handleSaveFinalCheck(item, value, evidence); }}
+                  onPickEvidence={() => handlePickFinalCheckEvidence(item.id)}
+                />
+              ) : (
+                <ChecklistItemRow
+                  key={item.id}
+                  item={pendingEvidence[item.id]?.length ? {
+                    ...item,
+                    response: {
+                      id: item.response?.id ?? "",
+                      job_checklist_instance_id: item.instance_id,
+                      checklist_item_id: item.id,
+                      response_value: item.response?.response_value ?? null,
+                      validation_result: item.response?.validation_result ?? null,
+                      evidence: [...new Map([
+                        ...(item.response?.evidence ?? []), ...pendingEvidence[item.id],
+                      ].map(file => [file.file_id, { file_id: file.file_id }])).values()],
+                    },
+                  } : item}
+                  disabled={!isEditable}
+                  saving={savingItemId === item.id}
+                  uploading={uploadingItemId === item.id}
+                  onSave={(value, evidence) => { void handleSaveFinalCheck(item, value, evidence); }}
+                  onPickEvidence={() => handlePickFinalCheckEvidence(item.id)}
                 />
               ))}
             </Card>

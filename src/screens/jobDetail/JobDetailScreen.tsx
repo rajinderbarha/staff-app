@@ -42,10 +42,11 @@ export function JobDetailScreen({ route, navigation }: Props) {
   const offline = networkStatus.networkState === "offline";
   const [menuOpen, setMenuOpen] = useState(false);
   const [contactSheetOpen, setContactSheetOpen] = useState(false);
+  const [declineOpen, setDeclineOpen] = useState(false);
 
   const {
     data, isLoading, isError, error, isRefetching, refetch,
-    mutating, mutationError, acceptJob, startTravel, markArrived,
+    mutating, mutationError, acceptJob, rejectJob, startTravel, markArrived,
     logCustomerContacted, startInspection,
   } = useJobDetail(jobId);
 
@@ -96,6 +97,20 @@ export function JobDetailScreen({ route, navigation }: Props) {
   // Opening the dialer does not prove the customer answered, so the
   // contact-first task is completed only by the technician confirming they
   // spoke to the customer. Calling is offered first, the confirmation after.
+  /** Declining hands the job back to the provider for reassignment; it never
+   *  cancels the customer's booking. Reasons are preset because the provider
+   *  reads them on the dispatch board. */
+  const declineOptions = useMemo(() => [
+    { key: "I am not available at that time", label: "I'm not available at that time", icon: "time-outline" as const },
+    { key: "The job is too far from me", label: "Too far from me", icon: "navigate-outline" as const },
+    { key: "This job needs a different skill set", label: "Needs a different skill set", icon: "construct-outline" as const },
+  ], []);
+
+  const handleDeclineChoice = useCallback(async (reason: string) => {
+    const result = await rejectJob(reason);
+    if (result?.ok) navigation.goBack();
+  }, [rejectJob, navigation]);
+
   const handleContactChoice = useCallback(async (key: string) => {
     if (key === "call") await customerCall.callCustomer();
     else if (key === "confirm") {
@@ -272,7 +287,13 @@ export function JobDetailScreen({ route, navigation }: Props) {
 
       <View style={{ flexDirection: "row", gap: theme.spacing.sm, padding: theme.spacing.base, borderTopWidth: 1, borderTopColor: theme.colors.borderSubtle }}>
         <View style={{ flex: 1 }}>
-          <SecondaryButton label="View full timeline" onPress={openTimeline} fullWidth />
+          {data.job.workflow_status === "assigned" ? (
+            // A technician who cannot take the job had no way to say so: the
+            // app only ever offered Accept.
+            <SecondaryButton label="Decline job" onPress={() => setDeclineOpen(true)} fullWidth />
+          ) : (
+            <SecondaryButton label="View full timeline" onPress={openTimeline} fullWidth />
+          )}
         </View>
         {nextAction ? (
           <View style={{ flex: 1 }}>
@@ -286,6 +307,14 @@ export function JobDetailScreen({ route, navigation }: Props) {
           </View>
         ) : null}
       </View>
+
+      <ActionSheet
+        visible={declineOpen}
+        title="Why are you declining this job?"
+        options={declineOptions}
+        onSelect={key => { void handleDeclineChoice(key); setDeclineOpen(false); }}
+        onClose={() => setDeclineOpen(false)}
+      />
 
       <ActionSheet
         visible={contactSheetOpen}

@@ -7,8 +7,9 @@
  *   API_BASE from env variable
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ENV } from "../config/environment";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = ENV.apiBaseUrl;
 
 export const STORAGE_KEYS = {
   token:    "serviceos_staff_token",
