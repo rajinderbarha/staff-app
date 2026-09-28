@@ -50,6 +50,7 @@ const BASE_DETAIL: JobMobileDetailDTO = {
   job_details: { type_required: true, brand_required: true, type_brand_value: "Split, LG", issue_summary: "AC not cooling" },
   allowed_actions: ["complete_inspection"],
   blocker: null,
+  arrival_confirmation: null,
   versions: { entity_version: null, workflow_version: null },
   server_timestamp: "2026-07-31T05:00:00Z",
 };
@@ -61,6 +62,7 @@ function baseHookReturn(overrides: Partial<ReturnType<typeof useJobDetail>> = {}
     acceptJob: jest.fn(), startTravel: jest.fn(), markArrived: jest.fn(),
     logCustomerContacted: jest.fn(async () => ({ ok: true as const })),
     startInspection: jest.fn(async () => ({ ok: true as const })),
+    confirmArrivalCode: jest.fn(async () => ({ ok: true as const })),
     ...overrides,
   };
 }
@@ -414,5 +416,85 @@ describe("JobDetailScreen — reaching a sub-screen that is not the next action"
 
     fireEvent.press(screen.getByText("Payment confirmation"));
     expect(mockNavigate).toHaveBeenCalledWith("DirectPaymentConfirmation", expect.objectContaining({ jobId: "j1" }));
+  });
+});
+
+describe("JobDetailScreen — waiting on the customer to confirm arrival", () => {
+  // Pressing Mark Reached on an Instagram visit does not advance the job: the
+  // customer is asked to confirm, and the job stays on_the_way until they do.
+  // Nothing said so, so an unchanged screen read as a hung app and the natural
+  // response was to press the button again.
+  const PENDING = {
+    ...BASE_DETAIL,
+    job: { ...BASE_DETAIL.job, workflow_status: "on_the_way" },
+    next_required_action: { key: "reached-site", label: "Mark Reached Site", allowed: true, route_key: "reached-site" },
+    arrival_confirmation: {
+      state: "awaiting_customer" as const,
+      challenge_id: "ch-1",
+      requested_at: "2026-09-28T10:00:00Z",
+      expires_at: "2026-09-28T10:10:00Z",
+      notification_sent: true,
+      failed_code_attempts: 0,
+    },
+  };
+
+  it("tells the technician the job is waiting on the customer, not stuck", () => {
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: PENDING }));
+    renderScreen();
+    expect(screen.getByText("Waiting for the customer to confirm")).toBeTruthy();
+    expect(screen.getByText(/moves on by itself/)).toBeTruthy();
+    expect(screen.getByText(/do not need to press/)).toBeTruthy();
+  });
+
+  it("says nothing about arrival when nothing is outstanding", () => {
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn());
+    renderScreen();
+    expect(screen.queryByText("Waiting for the customer to confirm")).toBeNull();
+  });
+
+  it("says so, and how to recover, when the chat message never went out", () => {
+    const undelivered = {
+      ...PENDING,
+      arrival_confirmation: { ...PENDING.arrival_confirmation, notification_sent: false },
+    };
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: undelivered }));
+    renderScreen();
+    expect(screen.getByText(/could not be delivered/)).toBeTruthy();
+  });
+
+  it("asks for a fresh request once the old one has expired", () => {
+    const expired = {
+      ...PENDING,
+      arrival_confirmation: { ...PENDING.arrival_confirmation, state: "expired" as const },
+    };
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: expired }));
+    renderScreen();
+    expect(screen.getByText("Arrival request expired")).toBeTruthy();
+    expect(screen.getByText(/Mark Reached Site again/)).toBeTruthy();
+    // No point offering a code for a challenge that is gone.
+    expect(screen.queryByText("Customer will read out the code instead")).toBeNull();
+  });
+
+  it("submits the read-out code against the pending challenge", async () => {
+    const confirmArrivalCode = jest.fn(async () => ({ ok: true as const }));
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: PENDING, confirmArrivalCode }));
+    renderScreen();
+
+    fireEvent.press(screen.getByText("Customer will read out the code instead"));
+    fireEvent.changeText(screen.getByPlaceholderText("000000"), "123456");
+    fireEvent.press(screen.getByText("Confirm arrival"));
+
+    await waitFor(() => expect(confirmArrivalCode).toHaveBeenCalledWith("ch-1", "123456"));
+  });
+
+  it("will not submit a code that is not six digits", () => {
+    const confirmArrivalCode = jest.fn(async () => ({ ok: true as const }));
+    (useJobDetail as jest.Mock).mockReturnValue(baseHookReturn({ data: PENDING, confirmArrivalCode }));
+    renderScreen();
+
+    fireEvent.press(screen.getByText("Customer will read out the code instead"));
+    fireEvent.changeText(screen.getByPlaceholderText("000000"), "123");
+    fireEvent.press(screen.getByText("Confirm arrival"));
+    expect(confirmArrivalCode).not.toHaveBeenCalled();
   });
 });

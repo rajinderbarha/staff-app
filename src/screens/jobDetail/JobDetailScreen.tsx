@@ -21,6 +21,7 @@ import { useCustomerCall } from "./useCustomerCall";
 import { JobDetailsGrid } from "./components/JobDetailsGrid";
 import { RequirementsSection } from "./components/RequirementsSection";
 import { VisitFeeBanner } from "./components/VisitFeeBanner";
+import { ArrivalConfirmationCard } from "./components/ArrivalConfirmationCard";
 import { useJobDetail } from "./useJobDetail";
 import { resolveActionHandling } from "./actionRouting";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
@@ -47,8 +48,9 @@ export function JobDetailScreen({ route, navigation }: Props) {
   const {
     data, isLoading, isError, error, isRefetching, refetch,
     mutating, mutationError, acceptJob, rejectJob, startTravel, markArrived,
-    logCustomerContacted, startInspection,
+    logCustomerContacted, startInspection, confirmArrivalCode,
   } = useJobDetail(jobId);
+  const [arrivalCodeError, setArrivalCodeError] = useState<string | null>(null);
 
   // Calls go through the technician's own phone dialer. Each tap is recorded
   // by the backend, and the refetch shows the new "last called" time.
@@ -137,6 +139,14 @@ export function JobDetailScreen({ route, navigation }: Props) {
       },
     ];
   }, [data]);
+
+  const submitArrivalCode = useCallback(async (challengeId: string, code: string) => {
+    setArrivalCodeError(null);
+    const result = await confirmArrivalCode(challengeId, code);
+    if (!result?.ok) {
+      setArrivalCodeError(result?.error?.safeMessage ?? "That code was not accepted.");
+    }
+  }, [confirmArrivalCode]);
 
   const workflowSteps: WorkflowStepModel[] = useMemo(
     () => (data?.workflow.stages ?? []).map(s => ({ key: s.key, label: s.label, state: s.state })),
@@ -253,6 +263,18 @@ export function JobDetailScreen({ route, navigation }: Props) {
         {data.blocker ? (
           <Section>
             <BlockerCard blocker={{ code: data.blocker.code, title: "Action needed", message: data.blocker.message ?? "This job is currently blocked.", severity: "warning" }} />
+          </Section>
+        ) : null}
+
+        {data.arrival_confirmation ? (
+          <Section>
+            <ArrivalConfirmationCard
+              arrival={data.arrival_confirmation}
+              customerAlias={data.customer.customer_alias}
+              submitting={mutating}
+              errorMessage={arrivalCodeError}
+              onSubmitCode={(challengeId, code) => { void submitArrivalCode(challengeId, code); }}
+            />
           </Section>
         ) : null}
 

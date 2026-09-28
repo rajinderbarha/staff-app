@@ -41,6 +41,24 @@ export function markArrived(jobId: string): Promise<ApiResult<Record<string, unk
 }
 
 /**
+ * POST /v1/staff/service-jobs/{job_id}/confirm-arrival-code
+ *
+ * The way out when the customer will not use the chat: they read the six-digit
+ * code from it aloud and the technician enters it. The code only exists in the
+ * customer's chat, which is what makes entering it evidence of being at the
+ * door rather than a self-declaration.
+ */
+export function confirmArrivalCode(
+  jobId: string, challengeId: string, code: string,
+): Promise<ApiResult<Record<string, unknown>>> {
+  return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/confirm-arrival-code`, {
+    method: "POST",
+    body: { challenge_id: challengeId, code },
+    unsafeToRetry: true,
+  });
+}
+
+/**
  * Records a tap on Call and returns the number to dial. The backend releases
  * the number only here, so every dialer opening is on record. `unsafeToRetry`
  * because a silent retry would record a second tap.

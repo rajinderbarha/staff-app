@@ -61,6 +61,10 @@ export function useJobDetail(jobId: string) {
   const startTravel = useCallback(() => runMutation(() => jobDetailApi.startTravel(jobId)), [runMutation, jobId]);
   const markArrived = useCallback(() => runMutation(() => jobDetailApi.markArrived(jobId)), [runMutation, jobId]);
   const logCustomerContacted = useCallback(() => runMutation(() => jobDetailApi.logCustomerContacted(jobId)), [runMutation, jobId]);
+  const confirmArrivalCode = useCallback(
+    (challengeId: string, code: string) =>
+      runMutation(() => jobDetailApi.confirmArrivalCode(jobId, challengeId, code)),
+    [runMutation, jobId]);
   const startInspection = useCallback(() => runMutation(() => jobDetailApi.startInspection(jobId)), [runMutation, jobId]);
 
   return {
@@ -78,5 +82,6 @@ export function useJobDetail(jobId: string) {
     markArrived,
     logCustomerContacted,
     startInspection,
+    confirmArrivalCode,
   };
 }

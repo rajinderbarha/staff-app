@@ -123,6 +123,24 @@ export interface JobDetailsDTO {
   issue_summary: string | null;
 }
 
+/** The arrival request a technician is waiting on.
+ *
+ * On an Instagram booking with arrival confirmation enabled, `reached-site`
+ * does not advance the job: it asks the customer to confirm, and the job stays
+ * `on_the_way` until they do. Null when nothing is outstanding.
+ */
+export interface ArrivalConfirmationDTO {
+  /** `expired` needs its own instruction -- the technician must ask again,
+   * which is not the same as "keep waiting". */
+  state: "awaiting_customer" | "expired";
+  challenge_id: string;
+  requested_at: string | null;
+  expires_at: string | null;
+  /** False means the chat message never went out, so waiting will not help. */
+  notification_sent: boolean;
+  failed_code_attempts: number;
+}
+
 export interface JobMobileDetailDTO {
   job: JobIdentityDTO;
   customer: CustomerContactDTO;
@@ -133,6 +151,7 @@ export interface JobMobileDetailDTO {
   job_details: JobDetailsDTO;
   allowed_actions: string[];
   blocker: BlockerDTO | null;
+  arrival_confirmation: ArrivalConfirmationDTO | null;
   versions: { entity_version: number | null; workflow_version: number | null };
   server_timestamp: string;
 }
