@@ -10,7 +10,9 @@ export interface SegmentedControlOption<T extends string> {
 
 export interface SegmentedControlProps<T extends string> {
   options: SegmentedControlOption<T>[];
-  value: T;
+  /** Omit for "nothing chosen yet" -- a question the user has to answer
+   * deliberately should not arrive with an answer pre-selected. */
+  value?: T;
   onChange: (value: T) => void;
   disabled?: boolean;
 }

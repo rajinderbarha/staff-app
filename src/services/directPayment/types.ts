@@ -19,7 +19,10 @@ export interface ExpectedAmountDTO {
 export type DirectPaymentMethod = "onsite_cash" | "onsite_upi" | "onsite_card" | "onsite_bank_transfer" | "onsite_other";
 export type ReconciliationStatus =
   | "not_declared" | "awaiting_provider" | "awaiting_customer" | "confirmed"
-  | "mismatched" | "disputed" | "cancelled" | "reversed";
+  | "mismatched" | "disputed" | "cancelled" | "reversed"
+  /** Set by the provider owner after following up a payment the customer did
+   * not make (provider-owned collection). */
+  | "unpaid";
 
 export interface ProviderRecordDTO {
   id: string;
@@ -54,6 +57,9 @@ export interface DirectPaymentDetailDTO {
   prerequisites: DirectPaymentPrerequisitesDTO;
   provider_record: ProviderRecordDTO | null;
   closure_readiness: ClosureReadinessDTO;
+  /** The methods this provider accepts, from their finance-readiness settings.
+   * The only source of truth for what to offer: the server refuses any other
+   * with DIRECT_PAYMENT_METHOD_NOT_ENABLED. Cash + UPI by default. */
   allowed_methods: DirectPaymentMethod[];
   allowed_actions: string[];
 }

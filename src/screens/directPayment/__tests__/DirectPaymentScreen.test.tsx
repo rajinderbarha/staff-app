@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { ThemeProvider } from "../../../design-system/themes";
 import { DirectPaymentScreen } from "../DirectPaymentScreen";
-import { DirectPaymentDetailDTO } from "../../../services/directPayment/types";
+import { DirectPaymentDetailDTO, DirectPaymentMethod } from "../../../services/directPayment/types";
 
 jest.mock("../useDirectPayment");
 jest.mock("../../../hooks/useNetworkStatus", () => ({ useNetworkStatus: jest.fn(() => ({ meta: { readiness: "production_ready" }, networkState: "online", cacheState: "fresh", pendingDrafts: 0, syncState: "idle" })) }));
@@ -24,7 +24,8 @@ const BASE_DETAIL: DirectPaymentDetailDTO = {
   prerequisites: { completion_proof_submitted: true, customer_handover_status: "requested" },
   provider_record: null,
   closure_readiness: { can_submit_provider_record: true, can_finalize: false, blockers: ["CUSTOMER_HANDOVER_NOT_ACKNOWLEDGED", "PAYMENT_NOT_DECLARED"] },
-  allowed_methods: ["onsite_cash", "onsite_upi", "onsite_card", "onsite_bank_transfer"],
+  // The backend default for a provider with no finance-readiness row.
+  allowed_methods: ["onsite_cash", "onsite_upi"],
   allowed_actions: ["declare_payment"],
 };
 
@@ -69,7 +70,8 @@ describe("DirectPaymentScreen — declaration state (spec sections 1, 3, 6, 8)",
     const declarePayment = jest.fn(async () => ({ ok: true as const }));
     (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment }));
     renderScreen();
-    fireEvent.press(screen.getByLabelText(/I confirm the provider received/));
+    // "Yes, received" is the explicit confirmation the old checkbox gave.
+    fireEvent.press(screen.getByText("Yes, received"));
     fireEvent.press(screen.getByText("Submit payment record"));
     expect(declarePayment).toHaveBeenCalledWith({ amount: "1701.00", method: "onsite_cash", reference_id: undefined });
   });
@@ -164,5 +166,111 @@ describe("DirectPaymentScreen — offline/loading/error", () => {
     renderScreen();
     fireEvent.press(screen.getByLabelText("Back"));
     expect(mockNavigate).toHaveBeenCalledWith("JobDetail", { jobId: "j1" });
+  });
+});
+
+
+describe("DirectPaymentScreen — did the provider receive the payment?", () => {
+  it("asks, and does not let a payment be recorded until it is answered", () => {
+    const declarePayment = jest.fn(async () => ({ ok: true as const }));
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment }));
+    renderScreen();
+    expect(screen.getByText(/Did the provider receive/)).toBeTruthy();
+    expect(screen.getByText("Yes, received")).toBeTruthy();
+    expect(screen.getByText("No, not received")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Submit payment record"), { stopPropagation: jest.fn() });
+    expect(declarePayment).not.toHaveBeenCalled();
+  });
+
+  it("on No, records nothing and explains who follows it up", () => {
+    const declarePayment = jest.fn(async () => ({ ok: true as const }));
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment }));
+    renderScreen();
+    fireEvent.press(screen.getByText("No, not received"));
+
+    expect(screen.getByText("Payment not received")).toBeTruthy();
+    expect(screen.getByText(/job stays open/)).toBeTruthy();
+    // Non-payment is provider-owned in the backend -- the technician is told so
+    // rather than being given a follow-up action they have no permission for.
+    expect(screen.getByText(/provider handles unpaid payments/)).toBeTruthy();
+    expect(screen.queryByText("Submit payment record")).toBeNull();
+    expect(declarePayment).not.toHaveBeenCalled();
+  });
+
+  it("on No, the way forward is back to the job", () => {
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn());
+    renderScreen();
+    fireEvent.press(screen.getByText("No, not received"));
+    fireEvent.press(screen.getByText("Back to job"));
+    expect(mockNavigate).toHaveBeenCalledWith("JobDetail", { jobId: "j1" });
+  });
+});
+
+describe("DirectPaymentScreen — only the methods the provider accepts", () => {
+  it("offers Cash and UPI, and not the Card or Bank transfer the app used to hardcode", () => {
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn());
+    renderScreen();
+    fireEvent.press(screen.getByText("Yes, received"));
+    expect(screen.getByText("Cash")).toBeTruthy();
+    expect(screen.getByText("UPI")).toBeTruthy();
+    expect(screen.queryByText(/Card/)).toBeNull();
+    expect(screen.queryByText("Bank transfer")).toBeNull();
+  });
+
+  it("follows the backend, not a fixed pair: a provider who enables card sees card", () => {
+    const methods: DirectPaymentMethod[] = ["onsite_cash", "onsite_upi", "onsite_card"];
+    const withCard = { ...BASE_DETAIL, allowed_methods: methods };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: withCard }));
+    renderScreen();
+    fireEvent.press(screen.getByText("Yes, received"));
+    expect(screen.getByText("Card (provider terminal)")).toBeTruthy();
+  });
+
+  it("records the method that was chosen", () => {
+    const declarePayment = jest.fn(async () => ({ ok: true as const }));
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment }));
+    renderScreen();
+    fireEvent.press(screen.getByText("Yes, received"));
+    fireEvent.press(screen.getByText("UPI"));
+    fireEvent.changeText(screen.getByPlaceholderText("Enter UPI/reference ID"), "UTR123");
+    fireEvent.press(screen.getByText("Submit payment record"));
+    expect(declarePayment).toHaveBeenCalledWith({ amount: "1701.00", method: "onsite_upi", reference_id: "UTR123" });
+  });
+
+  it("says so, and cannot submit, when the provider has enabled no method", () => {
+    const declarePayment = jest.fn(async () => ({ ok: true as const }));
+    const none = { ...BASE_DETAIL, allowed_methods: [] };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: none, declarePayment }));
+    renderScreen();
+    fireEvent.press(screen.getByText("Yes, received"));
+    expect(screen.getByText("No payment method is set up")).toBeTruthy();
+    fireEvent.press(screen.getByText("Submit payment record"), { stopPropagation: jest.fn() });
+    expect(declarePayment).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("DirectPaymentScreen — handover readiness matches what the backend closes on", () => {
+  // The backend treats a customer who had already left, as attested by the
+  // technician, as a completed handover. This row demanded "acknowledged" only,
+  // so a job the server would close showed a Pending handover.
+  it("counts a customer who was unavailable as a completed handover", () => {
+    const away = {
+      ...BASE_DETAIL,
+      prerequisites: { ...BASE_DETAIL.prerequisites, customer_handover_status: "customer_unavailable" },
+    };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: away }));
+    renderScreen();
+    // Completion proof + customer handover. (No payment record yet, so the two
+    // payment rows stay Pending.)
+    expect(screen.getAllByText("Complete")).toHaveLength(2);
+  });
+
+  it("still shows a merely requested handover as pending", () => {
+    // Control: without it the test above would pass on the proof row alone.
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn());
+    renderScreen();
+    expect(screen.getAllByText("Complete")).toHaveLength(1);
   });
 });

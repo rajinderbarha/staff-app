@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, ScrollView, RefreshControl } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useTheme } from "../../design-system/themes";
@@ -7,7 +7,6 @@ import { Card, Section } from "../../design-system/components/foundation/Layout"
 import { AppText } from "../../design-system/components/typography/AppText";
 import { IconButton } from "../../design-system/components/actions/IconButton";
 import { TextField } from "../../design-system/components/forms/TextField";
-import { Checkbox } from "../../design-system/components/forms/Checkbox";
 import { SegmentedControl } from "../../design-system/components/forms/SegmentedControl";
 import { Skeleton } from "../../design-system/components/feedback/Loading";
 import { ErrorState } from "../../design-system/components/feedback/States";
@@ -22,16 +21,33 @@ import { JobExecutionStackParamList } from "../../navigation/routeTypes";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "DirectPaymentConfirmation">;
 
-const METHOD_OPTIONS: { value: DirectPaymentMethod; label: string }[] = [
-  { value: "onsite_cash", label: "Cash" },
-  { value: "onsite_upi", label: "UPI" },
-  { value: "onsite_card", label: "Card to provider" },
-  { value: "onsite_bank_transfer", label: "Bank transfer" },
+/**
+ * Labels only. WHICH methods are offered is the provider's decision, sent as
+ * `allowed_methods` -- this list used to be hardcoded with Card and Bank
+ * transfer that most providers have not enabled, and the server refuses a
+ * disabled method with DIRECT_PAYMENT_METHOD_NOT_ENABLED. Offering it was
+ * offering a button that could only fail.
+ */
+const METHOD_LABEL: Record<DirectPaymentMethod, string> = {
+  onsite_cash: "Cash",
+  onsite_upi: "UPI",
+  onsite_card: "Card (provider terminal)",
+  onsite_bank_transfer: "Bank transfer",
+  onsite_other: "Other",
+};
+
+/** Did the provider receive the money? Unanswered until the technician says. */
+type Received = "yes" | "no" | null;
+
+const RECEIVED_OPTIONS: { value: "yes" | "no"; label: string }[] = [
+  { value: "yes", label: "Yes, received" },
+  { value: "no", label: "No, not received" },
 ];
 
 const STATUS_LABEL: Record<string, string> = {
   not_declared: "Not recorded", awaiting_provider: "Awaiting provider", awaiting_customer: "Awaiting customer confirmation",
   confirmed: "Confirmed", mismatched: "Amount mismatch", disputed: "Disputed", cancelled: "Cancelled", reversed: "Reversed",
+  unpaid: "Marked unpaid by your provider",
 };
 
 /**
@@ -45,18 +61,31 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
   const networkStatus = useNetworkStatus();
   const offline = networkStatus.networkState === "offline";
 
-  const [method, setMethod] = useState<DirectPaymentMethod>("onsite_cash");
+  const [received, setReceived] = useState<Received>(null);
+  const [method, setMethod] = useState<DirectPaymentMethod | null>(null);
   const [reference, setReference] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
 
   const { data, isLoading, isError, error, isRefetching, refetch, mutating, mutationError, declarePayment, remindCustomer, finalizeJob } = useDirectPayment(jobId);
 
   const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
 
+  const allowedMethods = data?.allowed_methods ?? [];
+  useEffect(() => {
+    if (!allowedMethods.length) {
+      setMethod(null);
+    } else if (!method || !allowedMethods.includes(method)) {
+      setMethod(allowedMethods[0]);
+    }
+    // `allowedMethods` is rebuilt each render; its contents are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedMethods.join(",")]);
+
   const handleDeclare = useCallback(async () => {
-    if (!data?.amount.expected_amount) return;
+    // Recording a payment asserts the provider has the money, so it is only
+    // reachable after an explicit "Yes, received".
+    if (received !== "yes" || !method || !data?.amount.expected_amount) return;
     await declarePayment({ amount: data.amount.expected_amount, method, reference_id: reference.trim() || undefined });
-  }, [data, declarePayment, method, reference]);
+  }, [data, declarePayment, method, reference, received]);
 
   const handleFinalize = useCallback(async () => {
     const result = await finalizeJob();
@@ -108,7 +137,13 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
   const readinessRows: ReadinessRow[] = [
     { label: "Completion proof", complete: data.prerequisites.completion_proof_submitted },
-    { label: "Customer handover", complete: data.prerequisites.customer_handover_status === "acknowledged" },
+    // Same rule the backend closes on: an absent customer, attested by the
+    // technician, satisfies handover. Showing it as incomplete here while the
+    // server counted it as done made a closable job look blocked.
+    {
+      label: "Customer handover",
+      complete: ["acknowledged", "customer_unavailable"].includes(data.prerequisites.customer_handover_status),
+    },
     { label: "Provider payment record", complete: hasRecord },
     { label: "Customer payment confirmation", complete: data.provider_record?.status === "confirmed" },
   ];
@@ -144,19 +179,59 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
         {!hasRecord ? (
           <Section>
-            <AppText variant="title" style={{ marginTop: theme.spacing.base, marginBottom: theme.spacing.xs }}>Payment received by provider</AppText>
-            <SegmentedControl options={METHOD_OPTIONS} value={method} onChange={setMethod} disabled={!canDeclare || offline} />
-            <View style={{ height: theme.spacing.sm }} />
-            {method !== "onsite_cash" ? (
-              <TextField label="Transaction reference" value={reference} onChangeText={setReference} placeholder="Enter UPI/reference ID" editable={canDeclare && !offline} />
-            ) : null}
-            <View style={{ height: theme.spacing.sm }} />
-            <Checkbox
-              label={data.amount.expected_amount ? `I confirm the provider received ₹${data.amount.expected_amount} directly from the customer.` : "I confirm the provider received payment directly from the customer."}
-              checked={confirmed}
-              onChange={setConfirmed}
+            <AppText variant="title" style={{ marginTop: theme.spacing.base, marginBottom: theme.spacing.xs }}>
+              {data.amount.expected_amount
+                ? `Did the provider receive ₹${data.amount.expected_amount} from the customer?`
+                : "Did the provider receive the payment from the customer?"}
+            </AppText>
+            <SegmentedControl
+              options={RECEIVED_OPTIONS}
+              value={received ?? undefined}
+              onChange={value => setReceived(value)}
               disabled={!canDeclare || offline}
             />
+            <View style={{ height: theme.spacing.sm }} />
+
+            {received === "yes" ? (
+              allowedMethods.length === 0 ? (
+                <InlineAlert
+                  tone="warning"
+                  title="No payment method is set up"
+                  message="Your provider hasn't enabled any payment methods yet. Ask them to turn on Cash or UPI in Finance readiness, then record this payment."
+                />
+              ) : (
+                <View>
+                  <AppText variant="bodySmall" color="secondary" style={{ marginBottom: theme.spacing.xs }}>How was it paid?</AppText>
+                  <SegmentedControl
+                    options={allowedMethods.map(value => ({ value, label: METHOD_LABEL[value] ?? value }))}
+                    value={method ?? undefined}
+                    onChange={setMethod}
+                    disabled={!canDeclare || offline}
+                  />
+                  {method && method !== "onsite_cash" ? (
+                    <View style={{ marginTop: theme.spacing.sm }}>
+                      <TextField label="Transaction reference" value={reference} onChangeText={setReference} placeholder="Enter UPI/reference ID" editable={canDeclare && !offline} />
+                    </View>
+                  ) : null}
+                  <AppText variant="caption" color="tertiary" style={{ marginTop: theme.spacing.sm }}>
+                    The customer is asked to confirm this in the Fuvay app before the job can close.
+                  </AppText>
+                </View>
+              )
+            ) : null}
+
+            {received === "no" ? (
+              <Card>
+                <AppText variant="bodyStrong">Payment not received</AppText>
+                <AppText variant="bodySmall" color="secondary" style={{ marginTop: 4 }}>
+                  Nothing is recorded, and the job stays open — it can't be completed until the payment is settled.
+                </AppText>
+                <AppText variant="bodySmall" color="secondary" style={{ marginTop: theme.spacing.xs }}>
+                  You don't need to chase it. Your provider handles unpaid payments from their provider portal: they
+                  can give the customer time to pay and, if it stays unpaid, pause this customer's bookings with your business.
+                </AppText>
+              </Card>
+            ) : null}
           </Section>
         ) : (
           <Section>
@@ -185,11 +260,22 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
       <View style={{ flexDirection: "row", gap: theme.spacing.sm, padding: theme.spacing.base, borderTopWidth: 1, borderTopColor: theme.colors.borderSubtle }}>
         <View style={{ flex: 1 }}>
-          <SecondaryButton label="Save draft" onPress={() => { void refetch(); }} fullWidth disabled={offline} />
+          {/* This only ever re-fetched; it never saved anything. */}
+          <SecondaryButton label="Refresh" onPress={() => { void refetch(); }} fullWidth disabled={offline} />
         </View>
         <View style={{ flex: 1 }}>
           {!hasRecord ? (
-            <PrimaryButton label="Submit payment record" onPress={handleDeclare} disabled={!canDeclare || !confirmed || offline} loading={mutating} fullWidth />
+            received === "no" ? (
+              <PrimaryButton label="Back to job" onPress={goBack} fullWidth />
+            ) : (
+              <PrimaryButton
+                label="Submit payment record"
+                onPress={handleDeclare}
+                disabled={!canDeclare || received !== "yes" || !method || offline}
+                loading={mutating}
+                fullWidth
+              />
+            )
           ) : (
             <PrimaryButton label="Complete job" onPress={handleFinalize} disabled={!canFinalize || offline} loading={mutating} fullWidth />
           )}
