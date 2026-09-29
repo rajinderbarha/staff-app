@@ -4,7 +4,7 @@ import { useTheme } from "../design-system/themes";
 
 /** Branded cold-start screen shown while the stored session is restored. */
 export function FoundationSplash() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const { colors, spacing, typography } = theme;
 
   return (
@@ -18,7 +18,7 @@ export function FoundationSplash() {
         alignItems: "center",
       }}
     >
-      <Image source={require("../../assets/fuvay-logo-native.png")} resizeMode="contain"
+      <Image source={mode === "dark" ? require("../../assets/fuvay-logo-native-dark.png") : require("../../assets/fuvay-logo-native.png")} resizeMode="contain"
         accessibilityLabel="Fuvay" style={{ width: 228, height: 72, marginBottom: spacing.lg }} />
       <Text style={[typography.headingLarge, { color: colors.textPrimary, marginBottom: spacing.sm, textAlign: "center" }]}>Fuvay Staff</Text>
       <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xl, textAlign: "center" }]}>

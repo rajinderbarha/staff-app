@@ -64,67 +64,71 @@ export interface ColorTokens {
   statusBarStyle: "dark" | "light";
 }
 
-// Blue palette (2026-08-04 rebrand, matching frontend/super-admin,
-// frontend/tenant-portal, frontend/customer-app and mobile/customer-app):
-// off-white background, never pure white everywhere.
+// Teal palette (2026-09-29 rebrand, from the new staff app logo: teal
+// #0F6B60 and black on white). Neutrals carry a slight teal tint so they
+// don't fight the brand; off-white background, never pure white everywhere.
+// Success moves to a yellower green so a completed step stays distinct from
+// the teal current step in timelines.
 export const lightColors: ColorTokens = {
-  brandPrimary: "#3868E0",
-  brandPrimaryPressed: "#2F5BD1",
-  brandPrimaryMuted: "#EEF3FF",
+  brandPrimary: "#0F6B60",
+  brandPrimaryPressed: "#0B5A51",
+  brandPrimaryMuted: "#E6F2F0",
   brandOnPrimary: "#FFFFFF",
 
-  backgroundPrimary: "#F5F8FD",
-  backgroundSecondary: "#F1F5FB",
+  backgroundPrimary: "#F4F8F7",
+  backgroundSecondary: "#EFF4F3",
   backgroundElevated: "#FFFFFF",
-  backgroundSunken: "#EAEFF8",
-  backgroundOverlay: "rgba(15, 23, 42, 0.45)",
+  backgroundSunken: "#E5EDEB",
+  backgroundOverlay: "rgba(10, 20, 18, 0.45)",
 
   surfaceDefault: "#FFFFFF",
   surfaceRaised: "#FFFFFF",
-  surfaceInteractive: "#EEF3FF",
-  surfaceSelected: "#EEF3FF",
-  surfaceDisabled: "#EAEFF8",
+  surfaceInteractive: "#E6F2F0",
+  surfaceSelected: "#E6F2F0",
+  surfaceDisabled: "#E5EDEB",
 
-  textPrimary: "#0F172A",
-  textSecondary: "#475569",
-  textTertiary: "#94A3B8",
-  textDisabled: "#CBD3E1",
+  textPrimary: "#101816",
+  textSecondary: "#4A5754",
+  textTertiary: "#8A9895",
+  textDisabled: "#C6D1CE",
   textInverse: "#FFFFFF",
-  textLink: "#2F5BD1",
+  textLink: "#0B5A51",
 
-  borderSubtle: "#E7EBF3",
-  borderDefault: "#CBD3E1",
-  borderStrong: "#94A3B8",
-  borderFocus: "#3868E0",
-  borderDisabled: "#E7EBF3",
+  borderSubtle: "#E2E9E7",
+  borderDefault: "#C6D1CE",
+  borderStrong: "#8A9895",
+  borderFocus: "#0F6B60",
+  borderDisabled: "#E2E9E7",
 
-  statusSuccess: "#1E8E5A",
-  statusSuccessSurface: "#E6F5EC",
+  statusSuccess: "#2E7D32",
+  statusSuccessSurface: "#E8F4E8",
   statusWarning: "#B5750B",
   statusWarningSurface: "#FCF0DC",
   statusDanger: "#C4342A",
   statusDangerSurface: "#FBE8E6",
   statusInfo: "#1E6FB8",
   statusInfoSurface: "#E6F0FA",
-  statusNeutral: "#475569",
-  statusNeutralSurface: "#EAEFF8",
+  statusNeutral: "#4A5754",
+  statusNeutralSurface: "#E5EDEB",
 
-  workflowCompleted: "#1E8E5A",
-  workflowCurrent: "#3868E0",
-  workflowUpcoming: "#94A3B8",
+  workflowCompleted: "#2E7D32",
+  workflowCurrent: "#0F6B60",
+  workflowUpcoming: "#8A9895",
   workflowBlocked: "#C4342A",
-  workflowCancelled: "#CBD3E1",
+  workflowCancelled: "#C6D1CE",
 
   statusBarStyle: "dark",
 };
 
 // Tesla-app reference dark mode: neutral charcoal-black layered surfaces
-// (never pure black everywhere), off-white (not pure-white) primary text,
-// electric-blue brand accent.
+// (never pure black everywhere), off-white (not pure-white) primary text.
+// The brand teal is lifted one step so it still reads on charcoal and keeps
+// white button text legible; links and the current workflow step use a
+// light teal.
 export const darkColors: ColorTokens = {
-  brandPrimary: "#1A6FE0",
-  brandPrimaryPressed: "#1558B8",
-  brandPrimaryMuted: "#1A3A5C",
+  brandPrimary: "#118072",
+  brandPrimaryPressed: "#0F6B60",
+  brandPrimaryMuted: "#143A35",
   brandOnPrimary: "#FFFFFF",
 
   backgroundPrimary: "#1C1C1E",
@@ -136,7 +140,7 @@ export const darkColors: ColorTokens = {
   surfaceDefault: "#232326",
   surfaceRaised: "#2C2C30",
   surfaceInteractive: "#2C2C30",
-  surfaceSelected: "#1A3A5C",
+  surfaceSelected: "#143A35",
   surfaceDisabled: "#202024",
 
   textPrimary: "#F5F5F7",
@@ -144,15 +148,15 @@ export const darkColors: ColorTokens = {
   textTertiary: "#6E6E73",
   textDisabled: "#44444A",
   textInverse: "#1C1C1E",
-  textLink: "#5AB0FF",
+  textLink: "#5CCFBD",
 
   borderSubtle: "#2C2C30",
   borderDefault: "#333338",
   borderStrong: "#44444A",
-  borderFocus: "#1A6FE0",
+  borderFocus: "#118072",
   borderDisabled: "#2C2C30",
 
-  statusSuccess: "#4ADE80",
+  statusSuccess: "#7BD67F",
   statusSuccessSurface: "#16301F",
   statusWarning: "#FBBF24",
   statusWarningSurface: "#3A2E0E",
@@ -163,8 +167,8 @@ export const darkColors: ColorTokens = {
   statusNeutral: "#9B9BA1",
   statusNeutralSurface: "#2C2C30",
 
-  workflowCompleted: "#4ADE80",
-  workflowCurrent: "#5AB0FF",
+  workflowCompleted: "#7BD67F",
+  workflowCurrent: "#5CCFBD",
   workflowUpcoming: "#6E6E73",
   workflowBlocked: "#F87171",
   workflowCancelled: "#44444A",

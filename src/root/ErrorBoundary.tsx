@@ -29,9 +29,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#171310", padding: 24 }}>
-          <Text style={{ color: "#F2994A", fontSize: 18, fontWeight: "600", marginBottom: 8 }}>Something went wrong</Text>
-          <Text style={{ color: "#B8AFA6", textAlign: "center" }}>Please restart the app.</Text>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1C1C1E", padding: 24 }}>
+          <Text style={{ color: "#5CCFBD", fontSize: 18, fontWeight: "600", marginBottom: 8 }}>Something went wrong</Text>
+          <Text style={{ color: "#9B9BA1", textAlign: "center" }}>Please restart the app.</Text>
         </View>
       );
     }

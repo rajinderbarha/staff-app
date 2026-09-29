@@ -16,7 +16,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#071633"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.serviceos.staff",
       "permissions": [
@@ -45,7 +45,11 @@
         {
           "image": "./assets/fuvay-logo-native.png",
           "resizeMode": "contain",
-          "backgroundColor": "#071633"
+          "backgroundColor": "#F4F8F7",
+          "dark": {
+            "image": "./assets/fuvay-logo-native-dark.png",
+            "backgroundColor": "#1C1C1E"
+          }
         }
       ]
     ],

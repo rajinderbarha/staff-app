@@ -16,7 +16,7 @@ export function AuthHeader() {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: theme.spacing.lg }}>
       <View>
-        <Image source={require("../../../../assets/fuvay-logo-native.png")} resizeMode="contain"
+        <Image source={mode === "dark" ? require("../../../../assets/fuvay-logo-native-dark.png") : require("../../../../assets/fuvay-logo-native.png")} resizeMode="contain"
           accessibilityLabel="Fuvay" style={{ width: 164, height: 44 }} />
         <AppText variant="label" color="tertiary">Technician App</AppText>
       </View>
