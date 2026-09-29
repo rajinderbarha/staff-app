@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as estimateApi from "../../services/estimate/estimateApi";
-import { QuoteItemType } from "../../services/estimate/types";
+import { EstimateItemInput } from "../../services/estimate/types";
 import { AppError } from "../../services/api/types";
 
 function queryKey(jobId: string) {
@@ -54,7 +54,7 @@ export function useEstimate(jobId: string) {
   const createRevision = useCallback((currentQuoteId: string) =>
     runMutation(() => estimateApi.createRevision(jobId, currentQuoteId)), [runMutation, jobId]);
 
-  const addItem = useCallback((quoteId: string, item: { item_type: QuoteItemType; item_name: string; item_description?: string; quantity: number; unit_price: number }) =>
+  const addItem = useCallback((quoteId: string, item: EstimateItemInput) =>
     runMutation(() => estimateApi.addEstimateItem(jobId, quoteId, item)), [runMutation, jobId]);
 
   const updateItem = useCallback((quoteId: string, itemId: string, patch: { item_name?: string; item_description?: string; quantity?: number; unit_price?: number }) =>

@@ -25,6 +25,20 @@ export interface QuoteLineItemDTO {
   unit_price: string;
   line_total: string;
   is_customer_visible: boolean;
+  /** Set when the line is an item from the provider's inventory. Its name and
+   * price are the catalogue's -- the backend ignores a price sent for it -- so
+   * only the quantity is editable. Null for manual lines such as labour. */
+  inventory: { inventory_item_id: string | null; sku: string | null; unit: string } | null;
+}
+
+/** What the sheet hands back. `inventory_item_id` makes the line inventory-backed. */
+export interface EstimateItemInput {
+  item_type: QuoteItemType;
+  item_name: string;
+  item_description?: string;
+  quantity: number;
+  unit_price: number;
+  inventory_item_id?: string;
 }
 
 export type QuoteStatus =

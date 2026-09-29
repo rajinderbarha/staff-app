@@ -20,8 +20,8 @@ const BASE_DETAIL: EstimateDetailDTO = {
   quote: {
     quote_id: "q1", version_number: 1, is_current: true, status: "draft", quote_type: "repair_quote",
     line_items: [
-      { id: "i1", item_type: "labour", item_name: "Gas refill & leak repair", item_description: null, quantity: "1", unit_price: "1200", line_total: "1200", is_customer_visible: true },
-      { id: "i2", item_type: "discount", item_name: "Visit fee adjustment", item_description: null, quantity: "1", unit_price: "299", line_total: "299", is_customer_visible: true },
+      { id: "i1", item_type: "labour", item_name: "Gas refill & leak repair", item_description: null, quantity: "1", unit_price: "1200", line_total: "1200", is_customer_visible: true, inventory: null },
+      { id: "i2", item_type: "discount", item_name: "Visit fee adjustment", item_description: null, quantity: "1", unit_price: "299", line_total: "299", is_customer_visible: true, inventory: null },
     ],
     valid_until: null, customer_notes: null,
   },

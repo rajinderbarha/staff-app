@@ -1,6 +1,6 @@
 import { authenticatedRequest } from "../api/authenticatedClient";
 import { ApiResult } from "../api/types";
-import { EstimateDetailDTO, QuoteDTO, QuoteItemType } from "./types";
+import { EstimateDetailDTO, EstimateItemInput, QuoteDTO } from "./types";
 
 export function getEstimateDetail(jobId: string, signal?: AbortSignal): Promise<ApiResult<EstimateDetailDTO>> {
   return authenticatedRequest<EstimateDetailDTO>(`/v1/staff/service-jobs/${jobId}/mobile-estimate`, { method: "GET", signal });
@@ -16,7 +16,7 @@ export function createRevision(jobId: string, currentQuoteId: string): Promise<A
 
 export function addEstimateItem(
   jobId: string, quoteId: string,
-  item: { item_type: QuoteItemType; item_name: string; item_description?: string; quantity: number; unit_price: number },
+  item: EstimateItemInput,
 ): Promise<ApiResult<Record<string, unknown>>> {
   return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/mobile-estimate/${quoteId}/items`, { method: "POST", body: item });
 }

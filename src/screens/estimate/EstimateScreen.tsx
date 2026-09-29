@@ -17,7 +17,7 @@ import { PriceSummaryCard } from "./components/PriceSummaryCard";
 import { AddItemSheet } from "./components/AddItemSheet";
 import { useEstimate } from "./useEstimate";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
-import { QuoteLineItemDTO } from "../../services/estimate/types";
+import { QuoteLineItemDTO, EstimateItemInput } from "../../services/estimate/types";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "Estimate">;
@@ -53,7 +53,7 @@ export function EstimateScreen({ route, navigation }: Props) {
     if (data?.quote) await createRevision(data.quote.quote_id);
   }, [createRevision, data]);
 
-  const handleSubmitItem = useCallback(async (item: { item_type: any; item_name: string; quantity: number; unit_price: number }) => {
+  const handleSubmitItem = useCallback(async (item: EstimateItemInput) => {
     if (!data?.quote) return;
     const result = itemSheet.editing
       ? await updateItem(data.quote.quote_id, itemSheet.editing.id, item)
@@ -187,11 +187,13 @@ export function EstimateScreen({ route, navigation }: Props) {
       ) : null}
 
       <AddItemSheet
+        jobId={jobId}
         visible={itemSheet.open}
         onClose={() => setItemSheet({ open: false, editing: null })}
         onSubmit={handleSubmitItem}
         initial={itemSheet.editing}
         submitting={mutating}
+        errorMessage={mutationError?.safeMessage ?? null}
       />
     </SafeAreaScreen>
   );
