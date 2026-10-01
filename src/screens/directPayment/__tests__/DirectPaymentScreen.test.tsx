@@ -206,6 +206,20 @@ describe("DirectPaymentScreen — did the provider receive the payment?", () => 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it("lets staff choose Cash or UPI when an older detail response omits the nonreceipt action", () => {
+    const reportPaymentNotReceived = jest.fn(async () => ({ ok: true as const }));
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({
+      data: { ...BASE_DETAIL, allowed_actions: [] },
+      reportPaymentNotReceived,
+    }));
+    renderScreen();
+    fireEvent.press(screen.getByText("No, not received"));
+    fireEvent.press(screen.getByText("Cash"));
+    fireEvent.press(screen.getByText("UPI"));
+    fireEvent.press(screen.getByText("Report not received"));
+    expect(reportPaymentNotReceived).toHaveBeenCalledWith({ method: "onsite_upi" });
+  });
+
   it("shows the saved nonreceipt record and a path back while the customer responds", () => {
     const detail = {
       ...BASE_DETAIL,

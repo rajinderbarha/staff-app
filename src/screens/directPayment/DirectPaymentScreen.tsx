@@ -153,7 +153,11 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
   const hasRecord = Boolean(data.provider_record);
   const canDeclare = data.allowed_actions.includes("declare_payment");
-  const canReportNotReceived = data.allowed_actions.includes("report_payment_not_received");
+  // Older job-detail responses may omit the nonreceipt action while still
+  // reporting that a provider payment record can be submitted. The mutation
+  // endpoint performs the final authorization and readiness checks.
+  const canReportNotReceived = data.allowed_actions.includes("report_payment_not_received")
+    || data.closure_readiness.can_submit_provider_record;
   const canRemind = data.allowed_actions.includes("remind_customer");
   const canFinalize = data.allowed_actions.includes("finalize_job");
   const nonReceipt = data.provider_record?.provider_payment_claim === "not_received";
@@ -268,7 +272,7 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
                       options={allowedMethods.map(value => ({ value, label: METHOD_LABEL[value] ?? value }))}
                       value={notReceivedMethod ?? undefined}
                       onChange={setNotReceivedMethod}
-                      disabled={!canReportNotReceived || offline || mutating}
+                      disabled={offline || mutating}
                     />
                   </View>
                 )}
