@@ -26,7 +26,7 @@ const BASE_DETAIL: DirectPaymentDetailDTO = {
   closure_readiness: { can_submit_provider_record: true, can_finalize: false, blockers: ["CUSTOMER_HANDOVER_NOT_ACKNOWLEDGED", "PAYMENT_NOT_DECLARED"] },
   // The backend default for a provider with no finance-readiness row.
   allowed_methods: ["onsite_cash", "onsite_upi"],
-  allowed_actions: ["declare_payment"],
+  allowed_actions: ["declare_payment", "report_payment_not_received"],
 };
 
 function baseHookReturn(overrides: Partial<ReturnType<typeof useDirectPayment>> = {}) {
@@ -34,6 +34,7 @@ function baseHookReturn(overrides: Partial<ReturnType<typeof useDirectPayment>> 
     data: BASE_DETAIL, isLoading: false, isError: false, error: null, isRefetching: false, refetch: jest.fn(),
     mutating: false, mutationError: null,
     declarePayment: jest.fn(async () => ({ ok: true as const })),
+    reportPaymentNotReceived: jest.fn(async () => ({ ok: true as const })),
     remindCustomer: jest.fn(async () => ({ ok: true as const })),
     finalizeJob: jest.fn(async () => ({ ok: true as const })),
     ...overrides,
@@ -106,13 +107,15 @@ describe("DirectPaymentScreen — awaiting customer / closure readiness", () => 
     expect(screen.getByText("Customer payment confirmation")).toBeTruthy();
   });
 
-  it("disables Complete Job until the backend allows finalization", () => {
+  it("offers a way back while the backend has not allowed finalization", () => {
     const finalizeJob = jest.fn(async () => ({ ok: true as const }));
     const detail = { ...BASE_DETAIL, provider_record: { id: "p1", declared_amount: "1701.00", expected_amount: "1701.00", currency: "INR", method: "onsite_cash", method_label: "Cash", provider_confirmation: { state: "confirmed", at: null }, customer_confirmation: { state: "pending", at: null, action: null }, status: "awaiting_customer" as const, status_label: "Awaiting customer", dispute_complaint_id: null, reminder_count: 0, last_reminder_at: null }, allowed_actions: ["remind_customer"] };
     (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, finalizeJob }));
     renderScreen();
-    fireEvent.press(screen.getByText("Complete job"));
+    expect(screen.queryByText("Complete job")).toBeNull();
+    fireEvent.press(screen.getByText("Back to job"));
     expect(finalizeJob).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith("JobDetail", { jobId: "j1" });
   });
 
   it("calls finalize once the backend allows it, and returns to Job Detail", () => {
@@ -183,27 +186,117 @@ describe("DirectPaymentScreen — did the provider receive the payment?", () => 
     expect(declarePayment).not.toHaveBeenCalled();
   });
 
-  it("on No, records nothing and explains who follows it up", () => {
+  it("on No, requires an expected method before reporting nonreceipt to the backend", () => {
     const declarePayment = jest.fn(async () => ({ ok: true as const }));
-    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment }));
+    const reportPaymentNotReceived = jest.fn(async () => ({ ok: true as const }));
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ declarePayment, reportPaymentNotReceived }));
     renderScreen();
     fireEvent.press(screen.getByText("No, not received"));
 
     expect(screen.getByText("Payment not received")).toBeTruthy();
     expect(screen.getByText(/job stays open/)).toBeTruthy();
-    // Non-payment is provider-owned in the backend -- the technician is told so
-    // rather than being given a follow-up action they have no permission for.
-    expect(screen.getByText(/provider handles unpaid payments/)).toBeTruthy();
+    expect(screen.getByText("How was payment expected?")).toBeTruthy();
     expect(screen.queryByText("Submit payment record")).toBeNull();
+    fireEvent.press(screen.getByText("Report not received"));
+    expect(reportPaymentNotReceived).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText("UPI"));
+    fireEvent.press(screen.getByText("Report not received"));
+    expect(reportPaymentNotReceived).toHaveBeenCalledWith({ method: "onsite_upi" });
     expect(declarePayment).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it("on No, the way forward is back to the job", () => {
-    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn());
+  it("shows the saved nonreceipt record and a path back while the customer responds", () => {
+    const detail = {
+      ...BASE_DETAIL,
+      provider_record: {
+        id: "p1", declared_amount: "1701.00", expected_amount: "1701.00", currency: "INR",
+        method: "onsite_upi", method_label: "UPI", provider_payment_claim: "not_received" as const,
+        provider_confirmation: { state: "not_received", at: null },
+        customer_confirmation: { state: "pending", at: null, action: null },
+        status: "awaiting_customer" as const, status_label: "Awaiting customer", dispute_complaint_id: null,
+        reminder_count: 0, last_reminder_at: null,
+      },
+      closure_readiness: { can_submit_provider_record: false, can_finalize: false, blockers: ["PAYMENT_NOT_RECONCILED"] },
+      allowed_actions: ["remind_customer"],
+    };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: detail }));
     renderScreen();
-    fireEvent.press(screen.getByText("No, not received"));
+    expect(screen.getByText("Payment follow-up")).toBeTruthy();
+    expect(screen.getByText(/Your nonreceipt report was saved/)).toBeTruthy();
+    expect(screen.getByText("Customer response or provider resolution")).toBeTruthy();
+    expect(screen.queryByText("Complete job")).toBeNull();
     fireEvent.press(screen.getByText("Back to job"));
     expect(mockNavigate).toHaveBeenCalledWith("JobDetail", { jobId: "j1" });
+  });
+
+  it("shows provider follow-up when the customer says they paid", () => {
+    const detail: DirectPaymentDetailDTO = {
+      ...BASE_DETAIL,
+      provider_record: {
+        id: "p1", declared_amount: "1701.00", expected_amount: "1701.00", currency: "INR",
+        method: "onsite_upi", method_label: "UPI", provider_payment_claim: "not_received",
+        provider_confirmation: { state: "not_received", at: null },
+        customer_confirmation: { state: "mismatched", at: null, action: "paid_claim" },
+        status: "mismatched", status_label: "Mismatch", dispute_complaint_id: null,
+        reminder_count: 0, last_reminder_at: null,
+      },
+      closure_readiness: { can_submit_provider_record: false, can_finalize: false, blockers: ["PAYMENT_NOT_RECONCILED"] },
+      allowed_actions: [],
+    };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: detail }));
+    renderScreen();
+    expect(screen.getByText("Customer says they paid; provider verification needed")).toBeTruthy();
+    expect(screen.getByText(/Ask your provider to verify/)).toBeTruthy();
+    expect(screen.queryByText("Complete job")).toBeNull();
+  });
+
+  it("allows job closure after the backend resolves nonreceipt as unpaid", () => {
+    const finalizeJob = jest.fn(async () => ({ ok: true as const }));
+    const detail: DirectPaymentDetailDTO = {
+      ...BASE_DETAIL,
+      prerequisites: { ...BASE_DETAIL.prerequisites, customer_handover_status: "acknowledged" },
+      provider_record: {
+        id: "p1", declared_amount: "1701.00", expected_amount: "1701.00", currency: "INR",
+        method: "onsite_upi", method_label: "UPI", provider_payment_claim: "not_received",
+        provider_confirmation: { state: "not_received", at: null },
+        customer_confirmation: { state: "pending", at: null, action: "not_paid" },
+        status: "unpaid", status_label: "Unpaid", dispute_complaint_id: null,
+        reminder_count: 0, last_reminder_at: null,
+      },
+      closure_readiness: { can_submit_provider_record: false, can_finalize: true, blockers: [] },
+      allowed_actions: ["finalize_job"],
+    };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: detail, finalizeJob }));
+    renderScreen();
+    expect(screen.getByText("Payment confirmed as not received")).toBeTruthy();
+    expect(screen.getAllByText("Complete")).toHaveLength(4);
+    fireEvent.press(screen.getByText("Complete job"));
+    expect(finalizeJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a provider's formal unresolved outcome as ready for closure", () => {
+    const detail: DirectPaymentDetailDTO = {
+      ...BASE_DETAIL,
+      prerequisites: { ...BASE_DETAIL.prerequisites, customer_handover_status: "acknowledged" },
+      provider_record: {
+        id: "p1", declared_amount: "1701.00", expected_amount: "1701.00", currency: "INR",
+        method: "onsite_upi", method_label: "UPI", provider_payment_claim: "not_received",
+        provider_resolution_action: "unresolved",
+        provider_confirmation: { state: "not_received", at: null },
+        customer_confirmation: { state: "mismatched", at: null, action: "paid_claim" },
+        status: "disputed", status_label: "Disputed", dispute_complaint_id: null,
+        reminder_count: 0, last_reminder_at: null,
+      },
+      closure_readiness: { can_submit_provider_record: false, can_finalize: true, blockers: [] },
+      allowed_actions: ["finalize_job"],
+    };
+    (useDirectPayment as jest.Mock).mockReturnValue(baseHookReturn({ data: detail }));
+    renderScreen();
+    expect(screen.getByText("Provider closed payment review as unresolved")).toBeTruthy();
+    expect(screen.getByText(/payment outcome is recorded/)).toBeTruthy();
+    expect(screen.queryByText(/follow-up needed/)).toBeNull();
+    expect(screen.getByText("Complete job")).toBeTruthy();
   });
 });
 

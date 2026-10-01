@@ -64,6 +64,9 @@ export function useDirectPayment(jobId: string) {
   const declarePayment = useCallback((body: { amount: string; method: DirectPaymentMethod; reference_id?: string; note?: string }) =>
     runMutation(() => api.declarePayment(jobId, body)), [runMutation, jobId]);
 
+  const reportPaymentNotReceived = useCallback((body: { method: DirectPaymentMethod; note?: string }) =>
+    runMutation(() => api.reportPaymentNotReceived(jobId, body)), [runMutation, jobId]);
+
   const remindCustomer = useCallback(() => runMutation(() => api.remindCustomer(jobId)), [runMutation, jobId]);
   const finalizeJob = useCallback(() => runMutation(() => api.finalizeJob(jobId)), [runMutation, jobId]);
 
@@ -75,6 +78,6 @@ export function useDirectPayment(jobId: string) {
     isRefetching: query.isRefetching,
     refetch: query.refetch,
     mutating, mutationError,
-    declarePayment, remindCustomer, finalizeJob,
+    declarePayment, reportPaymentNotReceived, remindCustomer, finalizeJob,
   };
 }

@@ -31,6 +31,8 @@ export interface ProviderRecordDTO {
   currency: string;
   method: string;
   method_label: string;
+  provider_payment_claim?: "received" | "not_received";
+  provider_resolution_action?: "payment_found" | "payment_not_found" | "request_reference" | "unresolved" | null;
   provider_confirmation: { state: string; at: string | null };
   customer_confirmation: { state: string; at: string | null; action: string | null };
   status: ReconciliationStatus;

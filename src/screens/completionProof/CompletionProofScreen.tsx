@@ -225,9 +225,10 @@ export function CompletionProofScreen({ route, navigation }: Props) {
         </Section>
 
         <Section>
-          <AppText variant="title" style={{ marginBottom: theme.spacing.xs }}>Resolution summary</AppText>
+          <AppText variant="title" style={{ marginBottom: theme.spacing.xs }}>Resolution summary (Required)</AppText>
           <Card>
             <TextArea
+              accessibilityLabel="Resolution summary, required"
               value={summaryValue}
               onChangeText={setResolutionSummary}
               onBlur={handleBlurSave}

@@ -12,6 +12,12 @@ export function declarePayment(jobId: string, body: {
   return authenticatedRequest<ProviderRecordDTO>(`/v1/staff/service-jobs/${jobId}/mobile-direct-payment/declare`, { method: "POST", body, unsafeToRetry: true });
 }
 
+export function reportPaymentNotReceived(jobId: string, body: {
+  method: DirectPaymentMethod; note?: string;
+}): Promise<ApiResult<ProviderRecordDTO>> {
+  return authenticatedRequest<ProviderRecordDTO>(`/v1/staff/service-jobs/${jobId}/mobile-direct-payment/report-not-received`, { method: "POST", body, unsafeToRetry: true });
+}
+
 export function remindCustomer(jobId: string): Promise<ApiResult<Record<string, unknown>>> {
   return authenticatedRequest(`/v1/staff/service-jobs/${jobId}/mobile-direct-payment/remind`, { method: "POST", unsafeToRetry: true });
 }

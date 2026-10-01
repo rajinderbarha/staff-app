@@ -47,7 +47,15 @@ const RECEIVED_OPTIONS: { value: "yes" | "no"; label: string }[] = [
 const STATUS_LABEL: Record<string, string> = {
   not_declared: "Not recorded", awaiting_provider: "Awaiting provider", awaiting_customer: "Awaiting customer confirmation",
   confirmed: "Confirmed", mismatched: "Amount mismatch", disputed: "Disputed", cancelled: "Cancelled", reversed: "Reversed",
-  unpaid: "Marked unpaid by your provider",
+  unpaid: "Payment unpaid",
+};
+
+const NONRECEIPT_STATUS_LABEL: Record<string, string> = {
+  awaiting_customer: "Payment not received; customer response pending",
+  mismatched: "Customer says they paid; provider verification needed",
+  unpaid: "Payment confirmed as not received",
+  confirmed: "Payment verified as received",
+  disputed: "Payment disputed; provider review pending",
 };
 
 /**
@@ -63,9 +71,10 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
   const [received, setReceived] = useState<Received>(null);
   const [method, setMethod] = useState<DirectPaymentMethod | null>(null);
+  const [notReceivedMethod, setNotReceivedMethod] = useState<DirectPaymentMethod | null>(null);
   const [reference, setReference] = useState("");
 
-  const { data, isLoading, isError, error, isRefetching, refetch, mutating, mutationError, declarePayment, remindCustomer, finalizeJob } = useDirectPayment(jobId);
+  const { data, isLoading, isError, error, isRefetching, refetch, mutating, mutationError, declarePayment, reportPaymentNotReceived, remindCustomer, finalizeJob } = useDirectPayment(jobId);
 
   const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
 
@@ -75,6 +84,9 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
       setMethod(null);
     } else if (!method || !allowedMethods.includes(method)) {
       setMethod(allowedMethods[0]);
+    }
+    if (notReceivedMethod && !allowedMethods.includes(notReceivedMethod)) {
+      setNotReceivedMethod(null);
     }
     // `allowedMethods` is rebuilt each render; its contents are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,6 +103,11 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
     const result = await finalizeJob();
     if (result.ok) goBack();
   }, [finalizeJob, goBack]);
+
+  const handleReportNotReceived = useCallback(async () => {
+    if (received !== "no" || !notReceivedMethod) return;
+    await reportPaymentNotReceived({ method: notReceivedMethod });
+  }, [notReceivedMethod, received, reportPaymentNotReceived]);
 
   if (isLoading) {
     return (
@@ -123,7 +140,11 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
         <View style={{ alignItems: "center", padding: theme.spacing.xxl }}>
           <AppText variant="title">Job completed</AppText>
           <AppText color="secondary" style={{ textAlign: "center", marginTop: theme.spacing.xs }}>
-            Payment recorded as paid directly to the provider.
+            {data.provider_record?.provider_resolution_action === "unresolved"
+              ? "The provider recorded the payment outcome as unresolved."
+              : data.provider_record?.provider_payment_claim === "not_received" && data.provider_record.status !== "confirmed"
+              ? "Payment was reported as not received and recorded for follow-up."
+              : "Payment recorded as paid directly to the provider."}
           </AppText>
         </View>
       </SafeAreaScreen>
@@ -132,8 +153,17 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
   const hasRecord = Boolean(data.provider_record);
   const canDeclare = data.allowed_actions.includes("declare_payment");
+  const canReportNotReceived = data.allowed_actions.includes("report_payment_not_received");
   const canRemind = data.allowed_actions.includes("remind_customer");
   const canFinalize = data.allowed_actions.includes("finalize_job");
+  const nonReceipt = data.provider_record?.provider_payment_claim === "not_received";
+  const recordStatus = data.provider_record?.status ?? "not_declared";
+  const providerClosedUnresolved = nonReceipt && data.provider_record?.provider_resolution_action === "unresolved";
+  const recordStatusLabel = (providerClosedUnresolved ? "Provider closed payment review as unresolved" : null)
+    ?? (nonReceipt ? NONRECEIPT_STATUS_LABEL[recordStatus] : null)
+    ?? STATUS_LABEL[recordStatus]
+    ?? data.provider_record?.status_label
+    ?? recordStatus;
 
   const readinessRows: ReadinessRow[] = [
     { label: "Completion proof", complete: data.prerequisites.completion_proof_submitted },
@@ -145,7 +175,10 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
       complete: ["acknowledged", "customer_unavailable"].includes(data.prerequisites.customer_handover_status),
     },
     { label: "Provider payment record", complete: hasRecord },
-    { label: "Customer payment confirmation", complete: data.provider_record?.status === "confirmed" },
+    {
+      label: nonReceipt ? "Customer response or provider resolution" : "Customer payment confirmation",
+      complete: hasRecord && !data.closure_readiness.blockers.includes("PAYMENT_NOT_RECONCILED"),
+    },
   ];
 
   return (
@@ -188,7 +221,7 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
               options={RECEIVED_OPTIONS}
               value={received ?? undefined}
               onChange={value => setReceived(value)}
-              disabled={!canDeclare || offline}
+              disabled={!(canDeclare || canReportNotReceived) || offline || mutating}
             />
             <View style={{ height: theme.spacing.sm }} />
 
@@ -224,21 +257,40 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
               <Card>
                 <AppText variant="bodyStrong">Payment not received</AppText>
                 <AppText variant="bodySmall" color="secondary" style={{ marginTop: 4 }}>
-                  Nothing is recorded, and the job stays open — it can't be completed until the payment is settled.
+                  Report this to your provider. The customer will be asked whether they paid, and the job stays open until the outcome is resolved.
                 </AppText>
-                <AppText variant="bodySmall" color="secondary" style={{ marginTop: theme.spacing.xs }}>
-                  You don't need to chase it. Your provider handles unpaid payments from their provider portal: they
-                  can give the customer time to pay and, if it stays unpaid, pause this customer's bookings with your business.
-                </AppText>
+                {allowedMethods.length === 0 ? (
+                  <InlineAlert tone="warning" title="No payment method is set up" message="Ask your provider to enable a payment method in Finance readiness before reporting this payment." />
+                ) : (
+                  <View style={{ marginTop: theme.spacing.sm }}>
+                    <AppText variant="bodySmall" color="secondary" style={{ marginBottom: theme.spacing.xs }}>How was payment expected?</AppText>
+                    <SegmentedControl
+                      options={allowedMethods.map(value => ({ value, label: METHOD_LABEL[value] ?? value }))}
+                      value={notReceivedMethod ?? undefined}
+                      onChange={setNotReceivedMethod}
+                      disabled={!canReportNotReceived || offline || mutating}
+                    />
+                  </View>
+                )}
               </Card>
             ) : null}
           </Section>
         ) : (
           <Section>
-            <AppText variant="title" style={{ marginBottom: theme.spacing.xs }}>Customer confirmation</AppText>
+            <AppText variant="title" style={{ marginBottom: theme.spacing.xs }}>{nonReceipt ? "Payment follow-up" : "Customer confirmation"}</AppText>
             <Card>
-              <AppText variant="bodyStrong">{STATUS_LABEL[data.provider_record!.status] ?? data.provider_record!.status}</AppText>
-              <AppText variant="caption" color="tertiary">A confirmation request was sent in the Fuvay app.</AppText>
+              <AppText variant="bodyStrong">{recordStatusLabel}</AppText>
+              <AppText variant="caption" color="tertiary">
+                {providerClosedUnresolved
+                  ? "The payment outcome is recorded. You can complete the job when its other requirements pass."
+                  : nonReceipt && recordStatus === "mismatched"
+                  ? "Ask your provider to verify the customer's payment claim in their portal."
+                  : nonReceipt && recordStatus === "awaiting_customer"
+                  ? "Your nonreceipt report was saved. The customer has been asked whether they paid in the Fuvay app."
+                  : nonReceipt
+                  ? "Your provider manages any remaining payment follow-up in their portal."
+                  : "A confirmation request was sent in the Fuvay app."}
+              </AppText>
               {canRemind ? (
                 <View style={{ marginTop: theme.spacing.sm }}>
                   <SecondaryButton label="Send reminder" onPress={() => { void remindCustomer(); }} disabled={mutating || offline} />
@@ -255,7 +307,7 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
           </Card>
         </Section>
 
-        <InlineAlert tone="warning" message="Job completes only after all required confirmations pass." />
+        <InlineAlert tone="warning" message="Job completes when the payment outcome and other requirements are resolved." />
       </ScrollView>
 
       <View style={{ flexDirection: "row", gap: theme.spacing.sm, padding: theme.spacing.base, borderTopWidth: 1, borderTopColor: theme.colors.borderSubtle }}>
@@ -266,7 +318,13 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
         <View style={{ flex: 1 }}>
           {!hasRecord ? (
             received === "no" ? (
-              <PrimaryButton label="Back to job" onPress={goBack} fullWidth />
+              <PrimaryButton
+                label="Report not received"
+                onPress={handleReportNotReceived}
+                disabled={!canReportNotReceived || !notReceivedMethod || offline || mutating}
+                loading={mutating}
+                fullWidth
+              />
             ) : (
               <PrimaryButton
                 label="Submit payment record"
@@ -277,7 +335,11 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
               />
             )
           ) : (
-            <PrimaryButton label="Complete job" onPress={handleFinalize} disabled={!canFinalize || offline} loading={mutating} fullWidth />
+            canFinalize ? (
+              <PrimaryButton label="Complete job" onPress={handleFinalize} disabled={offline || mutating} loading={mutating} fullWidth />
+            ) : (
+              <PrimaryButton label="Back to job" onPress={goBack} fullWidth />
+            )
           )}
         </View>
       </View>

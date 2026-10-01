@@ -33,6 +33,18 @@ describe("useDirectPayment (spec sections 6, 13, 14, 17)", () => {
     expect((api.getDirectPaymentDetail as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("reportPaymentNotReceived posts the expected method and refetches the server record", async () => {
+    (api.getDirectPaymentDetail as jest.Mock).mockResolvedValue({ ok: true, data: { job: { job_id: "j1" }, provider_record: null } });
+    (api.reportPaymentNotReceived as jest.Mock).mockResolvedValue({ ok: true, data: { id: "p1", provider_payment_claim: "not_received" } });
+    const { result } = renderHook(() => useDirectPayment("j1"), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => { await result.current.reportPaymentNotReceived({ method: "onsite_upi" }); });
+
+    expect(api.reportPaymentNotReceived).toHaveBeenCalledWith("j1", { method: "onsite_upi" });
+    expect((api.getDirectPaymentDetail as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("guards against a duplicate finalize while one is in flight", async () => {
     (api.getDirectPaymentDetail as jest.Mock).mockResolvedValue({ ok: true, data: { job: { job_id: "j1" }, provider_record: null } });
     let resolveFinalize: (v: any) => void = () => {};
