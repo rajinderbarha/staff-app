@@ -15,6 +15,7 @@ import { ChecklistItemRow } from "./components/ChecklistItemRow";
 import { useInspection } from "./useInspection";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "Inspection">;
 
@@ -37,7 +38,7 @@ export function InspectionScreen({ route, navigation }: Props) {
     completing, completeError, complete,
   } = useInspection(jobId);
 
-  const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goBack = useCallback(() => backToJobDetail(navigation, jobId), [navigation, jobId]);
 
   const handlePickEvidence = useCallback(async (itemId: string): Promise<{ ok: boolean; fileId?: string }> => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();

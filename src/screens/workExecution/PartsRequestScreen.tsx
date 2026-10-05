@@ -16,6 +16,7 @@ import { useWorkExecution } from "./useWorkExecution";
 import { CreatePartsRequestBody, PartsRequestStatus } from "../../services/workExecution/types";
 import { MobileHeader } from "../../design-system/components/navigation";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "PartsRequest">;
 
@@ -57,7 +58,7 @@ export function PartsRequestScreen({ route, navigation }: Props) {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [cancelId, setCancelId] = useState<string | null>(null);
 
-  const goBack = () => navigation.navigate("JobDetail", { jobId });
+  const goBack = () => backToJobDetail(navigation, jobId);
 
   const handleSubmit = async (body: CreatePartsRequestBody) => {
     const result = await requestPart(body);

@@ -47,6 +47,9 @@ export function useJobDetail(jobId: string) {
       }
       // Never optimistic -- always re-fetch authoritative state after success.
       await queryClient.invalidateQueries({ queryKey });
+      // Accepting, declining or advancing a job also changes the Jobs list
+      // and the Jobs tab badge; refresh them without waiting for the poll.
+      void queryClient.invalidateQueries({ queryKey: ["jobs", "tab-badge"] });
       return { ok: true as const };
     } finally {
       setMutating(false);

@@ -249,6 +249,21 @@ function CurrentJobSection({ job, offline, onPress }: { job: CurrentJobDTO; offl
   );
 }
 
+/** "15:00-16:00" as start over end. In one fixed-width line it wrapped mid
+ * number ("15:00-16:0" / "0"). Anything not in that shape stays on one line. */
+function ScheduleTime({ window }: { window: string | null | undefined }) {
+  const parts = window?.split("-").map(part => part.trim());
+  if (parts && parts.length === 2 && parts[0] && parts[1]) {
+    return (
+      <View style={{ width: 64 }}>
+        <AppText variant="bodySmall" color="secondary">{parts[0]}</AppText>
+        <AppText variant="caption" color="tertiary">{parts[1]}</AppText>
+      </View>
+    );
+  }
+  return <AppText variant="bodySmall" color="tertiary" style={{ minWidth: 64 }}>{window ?? "--"}</AppText>;
+}
+
 function ScheduleRow({ row, onPress }: { row: ScheduleRowDTO; onPress: () => void }) {
   const { theme } = useTheme();
   return (
@@ -258,7 +273,7 @@ function ScheduleRow({ row, onPress }: { row: ScheduleRowDTO; onPress: () => voi
       accessibilityLabel={`Job ${row.job_reference}, ${row.workflow_status}, scheduled ${row.scheduled_time_window ?? "time not set"}`}
       style={{ flexDirection: "row", alignItems: "center", padding: theme.spacing.md, gap: theme.spacing.sm, minHeight: 44 }}
     >
-      <AppText variant="bodySmall" color="tertiary" style={{ width: 64 }}>{row.scheduled_time_window ?? "--"}</AppText>
+      <ScheduleTime window={row.scheduled_time_window} />
       <View style={{ flex: 1 }}>
         <AppText variant="bodyStrong">{row.job_reference}</AppText>
         {row.locality_label ? <Caption color="tertiary">{row.locality_label}</Caption> : null}

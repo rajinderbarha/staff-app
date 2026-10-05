@@ -19,6 +19,7 @@ import { useEstimate } from "./useEstimate";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { QuoteLineItemDTO, EstimateItemInput } from "../../services/estimate/types";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "Estimate">;
 
@@ -46,7 +47,7 @@ export function EstimateScreen({ route, navigation }: Props) {
     mutating, mutationError, createEstimate, createRevision, addItem, updateItem, removeItem, sendForApproval,
   } = useEstimate(jobId);
 
-  const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goBack = useCallback(() => backToJobDetail(navigation, jobId), [navigation, jobId]);
 
   const handleCreate = useCallback(async () => { await createEstimate(); }, [createEstimate]);
   const handleRevise = useCallback(async () => {

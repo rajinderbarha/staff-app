@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { AppTabsParamList } from "./routeTypes";
 import { Icon, IconProps } from "../design-system/components/Icon";
 import { useTheme } from "../design-system/themes";
-import { useTabBadge, defaultBadgeAdapter } from "./placeholders/badges";
+import { useTabBadge, defaultBadgeAdapter, badgeQueryKeys } from "./placeholders/badges";
 import { TechnicianHomeScreen } from "../screens/home/TechnicianHomeScreen";
 import { JobsScreen } from "../screens/jobs/JobsScreen";
 import { ScheduleNavigator } from "./ScheduleNavigator";
@@ -31,8 +31,8 @@ export function AppTabs() {
   const { theme } = useTheme();
   const jobsBadgeFetcher = useCallback(() => defaultBadgeAdapter.fetchActionableJobCount(), []);
   const notificationsBadgeFetcher = useCallback(() => defaultBadgeAdapter.fetchUnreadNotificationCount(), []);
-  const jobsBadge = useTabBadge(jobsBadgeFetcher);
-  const notificationsBadge = useTabBadge(notificationsBadgeFetcher);
+  const jobsBadge = useTabBadge(badgeQueryKeys.actionableJobs, jobsBadgeFetcher);
+  const notificationsBadge = useTabBadge(badgeQueryKeys.unreadNotifications, notificationsBadgeFetcher);
 
   return (
     <Tab.Navigator

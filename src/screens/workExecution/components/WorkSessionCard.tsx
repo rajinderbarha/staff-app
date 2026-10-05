@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useTheme } from "../../../design-system/themes";
 import { Card } from "../../../design-system/components/foundation/Layout";
@@ -22,25 +22,31 @@ export interface WorkSessionCardProps {
 }
 
 /**
- * Server-authoritative elapsed time (spec section 7): the on-screen ticking
- * clock is presentation only, derived from `accumulated_seconds` (frozen at
- * the last pause/refetch) plus a local 1s ticker while the session is
- * active -- reconstructed from backend data on every load/refetch, never
- * trusted across an app restart on its own.
+ * Server-authoritative elapsed time (spec section 7). For an active session
+ * the backend's `accumulated_seconds` is already LIVE -- it includes the
+ * running segment as of the moment it answered. The local ticker therefore
+ * only adds the time since that answer arrived, and re-anchors on every
+ * refetch. It used to add its own count since mount on top of the live value,
+ * so each 30s refetch pushed the clock further ahead (it read about double).
  */
 export function WorkSessionCard({ session, onPause, onResume, disabled }: WorkSessionCardProps) {
   const { theme } = useTheme();
-  const [tick, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  // When the current server value arrived: re-anchors each time a refetch
+  // delivers a different value (or the session pauses/resumes).
+  const serverValue = `${session?.state}:${session?.accumulated_seconds}`;
+  const anchoredAt = useMemo(() => (serverValue ? Date.now() : 0), [serverValue]);
 
   useEffect(() => {
     if (session?.state !== "active") return;
-    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [session?.state]);
 
   if (!session) return null;
 
-  const displaySeconds = session.state === "active" ? session.accumulated_seconds + tick : session.accumulated_seconds;
+  const sinceAnswer = Math.max(0, Math.floor((now - anchoredAt) / 1000));
+  const displaySeconds = session.state === "active" ? session.accumulated_seconds + sinceAnswer : session.accumulated_seconds;
 
   return (
     <Card>

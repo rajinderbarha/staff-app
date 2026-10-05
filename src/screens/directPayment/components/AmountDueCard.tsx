@@ -28,7 +28,13 @@ export function AmountDueCard({ amount }: { amount: ExpectedAmountDTO }) {
       )}
       {amount.approved_estimate ? (
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: theme.spacing.sm }}>
-          <AppText variant="bodySmall" color="secondary">Approved estimate v{amount.approved_estimate.version_number}</AppText>
+          {/* The backend sends the current estimate whether or not the customer
+              approved it; only call it approved when it is. */}
+          <AppText variant="bodySmall" color="secondary">
+            {amount.approved_estimate.is_approved
+              ? `Approved estimate v${amount.approved_estimate.version_number}`
+              : `Estimate v${amount.approved_estimate.version_number} (not approved)`}
+          </AppText>
           <Money amount={Number(amount.approved_estimate.total_amount)} size="medium" />
         </View>
       ) : null}

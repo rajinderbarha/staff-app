@@ -12,6 +12,7 @@ import { WorkExecutionScreen } from "../screens/workExecution/WorkExecutionScree
 import { CompletionProofScreen } from "../screens/completionProof/CompletionProofScreen";
 import { DirectPaymentScreen } from "../screens/directPayment/DirectPaymentScreen";
 import { PartsRequestScreen } from "../screens/workExecution/PartsRequestScreen";
+import { backToJobDetail } from "./backToJobDetail";
 
 const Stack = createNativeStackNavigator<JobExecutionStackParamList>();
 
@@ -34,7 +35,7 @@ function makeScreen(name: PlaceholderScreenName) {
   const meta = SCREEN_META[name];
   return function JobExecutionScreen({ route, navigation }: NativeStackScreenProps<JobExecutionStackParamList, typeof name>) {
     const { jobId } = route.params;
-    const goBack = () => navigation.navigate("JobDetail", { jobId });
+    const goBack = () => backToJobDetail(navigation, jobId);
     return (
       <>
         <MobileHeader title={`${meta.title} · ${jobId}`} onBack={goBack} />

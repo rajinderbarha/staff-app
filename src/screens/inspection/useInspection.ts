@@ -34,7 +34,14 @@ export function useInspection(jobId: string) {
     enabled: Boolean(jobId),
   });
 
-  const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: key }), [queryClient, key]);
+  // Also refresh Job Detail, the Jobs list and Home. "Back" returns to the
+  // Job Detail already in the stack rather than pushing a fresh one, so it
+  // must be told the job moved on or it shows the stage the technician left.
+  const refresh = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: key });
+    void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    void queryClient.invalidateQueries({ queryKey: ["technician"] });
+  }, [queryClient, key]);
 
   const saveItemResponse = useCallback(async (
     instanceId: string, itemId: string,

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { View, ScrollView, RefreshControl } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -23,6 +23,7 @@ import { useCompletionProof } from "./useCompletionProof";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
 import { CompletionProofDefinitionDTO } from "../../services/completionProof/types";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type FinalCheck = CompletionProofDefinitionDTO["final_checks"][number];
 
@@ -94,20 +95,38 @@ export function CompletionProofScreen({ route, navigation }: Props) {
     saveDraft, saveFinalCheck, uploadFinalCheckEvidence, addEvidenceFromUpload, removeEvidence, submit, requestHandover, sendReminder, markCustomerUnavailable,
   } = useCompletionProof(jobId);
 
-  const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goBack = useCallback(() => backToJobDetail(navigation, jobId), [navigation, jobId]);
   const goToPayment = useCallback(() => navigation.navigate("DirectPaymentConfirmation", { jobId }), [navigation, jobId]);
 
   const summaryValue = resolutionSummary ?? data?.proof.resolution_summary ?? "";
   const notesValue = serviceNotes ?? data?.proof.final_service_notes ?? "";
+  // Typed but not yet saved. The server only learns the text on blur or
+  // "Save draft", and hiding the keyboard does not blur on Android.
+  const hasUnsavedText =
+    (resolutionSummary !== null && resolutionSummary !== (data?.proof.resolution_summary ?? "")) ||
+    (serviceNotes !== null && serviceNotes !== (data?.proof.final_service_notes ?? ""));
+  // Set while submitting, so the blur that follows the field turning
+  // read-only cannot fire a draft save the server must refuse (409).
+  const submittingRef = useRef(false);
 
   const handleBlurSave = useCallback(() => {
+    if (submittingRef.current || data?.proof.status !== "draft") return;
     saveDraft({ resolution_summary: summaryValue, final_service_notes: notesValue });
-  }, [saveDraft, summaryValue, notesValue]);
+  }, [saveDraft, summaryValue, notesValue, data?.proof.status]);
 
   const handleSubmit = useCallback(async () => {
-    const result = await submit();
-    if (result.ok) { /* stay on screen to show submitted read-only state + handover controls */ }
-  }, [submit]);
+    submittingRef.current = true;
+    try {
+      if (hasUnsavedText) {
+        const saved = await saveDraft({ resolution_summary: summaryValue, final_service_notes: notesValue });
+        if (!saved.ok) return;
+      }
+      const result = await submit();
+      if (result.ok) { /* stay on screen to show submitted read-only state + handover controls */ }
+    } finally {
+      submittingRef.current = false;
+    }
+  }, [submit, saveDraft, hasUnsavedText, summaryValue, notesValue]);
 
   const handleRequestHandover = useCallback(async () => {
     const result = await requestHandover();
@@ -196,7 +215,13 @@ export function CompletionProofScreen({ route, navigation }: Props) {
 
   const isDraft = data.proof.status === "draft";
   const isEditable = isDraft && !offline;
-  const canSubmit = data.allowed_actions.includes("submit_proof");
+  // The server's answer reflects the SAVED draft. When the only thing it is
+  // waiting for is the summary the technician has already typed, submitting
+  // saves that text first -- the button must not sit disabled with no reason.
+  const blockers = data.readiness?.blockers ?? [];
+  const onlySummaryMissing = blockers.length > 0 && blockers.every(code => code === "RESOLUTION_SUMMARY_REQUIRED");
+  const canSubmit = data.allowed_actions.includes("submit_proof")
+    || (isDraft && hasUnsavedText && summaryValue.trim().length > 0 && onlySummaryMissing);
 
   return (
     <SafeAreaScreen edges={["top", "left", "right"]}>

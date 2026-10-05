@@ -18,6 +18,7 @@ import { useDirectPayment } from "./useDirectPayment";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { DirectPaymentMethod } from "../../services/directPayment/types";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "DirectPaymentConfirmation">;
 
@@ -76,7 +77,7 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
 
   const { data, isLoading, isError, error, isRefetching, refetch, mutating, mutationError, declarePayment, reportPaymentNotReceived, remindCustomer, finalizeJob } = useDirectPayment(jobId);
 
-  const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goBack = useCallback(() => backToJobDetail(navigation, jobId), [navigation, jobId]);
 
   const allowedMethods = data?.allowed_methods ?? [];
   useEffect(() => {
@@ -204,8 +205,13 @@ export function DirectPaymentScreen({ route, navigation }: Props) {
         {offline ? <View style={{ marginBottom: theme.spacing.base }}><InlineAlert tone="neutral" title="Offline" message="Payment confirmation is read-only until you reconnect." /></View> : null}
         {mutationError ? <View style={{ marginBottom: theme.spacing.base }}><InlineAlert tone="danger" title="Couldn't complete that action" message={mutationError.safeMessage} /></View> : null}
 
-        <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginBottom: theme.spacing.base }}>
-          <InlineAlert tone={data.prerequisites.completion_proof_submitted ? "success" : "neutral"} message="Completion proof submitted" />
+        {/* A plain block, not a flex row: inside a row the alert's flex:1 text
+            column collapsed to zero width and only the tick showed. */}
+        <View style={{ marginBottom: theme.spacing.base }}>
+          <InlineAlert
+            tone={data.prerequisites.completion_proof_submitted ? "success" : "neutral"}
+            message={data.prerequisites.completion_proof_submitted ? "Completion proof submitted" : "Completion proof not submitted yet"}
+          />
         </View>
 
         <Section>

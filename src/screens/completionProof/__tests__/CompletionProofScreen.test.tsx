@@ -311,3 +311,45 @@ describe("CompletionProofScreen — a proof that has no photo lists at all", () 
     expect(screen.getByText("Before & after evidence")).toBeTruthy();
   });
 });
+
+describe("submitting with a summary that was typed but not yet saved", () => {
+  const SUMMARY_ONLY: CompletionProofDetailDTO = {
+    ...BASE_DETAIL,
+    definition: { ...BASE_DETAIL.definition, final_checks: [] },
+    proof: { ...BASE_DETAIL.proof, resolution_summary: null },
+    readiness: { can_submit: false, missing_check_ids: [], missing_evidence_categories: [], unresolved_parts: [], blockers: ["RESOLUTION_SUMMARY_REQUIRED"] },
+    allowed_actions: ["save_draft"],
+  };
+
+  it("enables Submit, saves the typed summary, then submits", async () => {
+    const saveDraft = jest.fn(async () => ({ ok: true as const }));
+    const submit = jest.fn(async () => ({ ok: true as const }));
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: SUMMARY_ONLY, saveDraft, submit }));
+    renderScreen();
+    fireEvent.changeText(screen.getByPlaceholderText(/Describe the diagnosed issue/), "Cleared the drain");
+    fireEvent.press(screen.getByText("Submit completion proof"));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    expect(saveDraft).toHaveBeenCalledWith({ resolution_summary: "Cleared the drain", final_service_notes: "" });
+    expect(saveDraft.mock.invocationCallOrder[0]).toBeLessThan(submit.mock.invocationCallOrder[0]);
+  });
+
+  it("does not submit when saving the summary fails", async () => {
+    const saveDraft = jest.fn(async () => ({ ok: false as const }));
+    const submit = jest.fn(async () => ({ ok: true as const }));
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: SUMMARY_ONLY, saveDraft, submit }));
+    renderScreen();
+    fireEvent.changeText(screen.getByPlaceholderText(/Describe the diagnosed issue/), "Cleared the drain");
+    fireEvent.press(screen.getByText("Submit completion proof"));
+    await waitFor(() => expect(saveDraft).toHaveBeenCalled());
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("does not save a draft on blur once the proof is submitted", () => {
+    const saveDraft = jest.fn(async () => ({ ok: true as const }));
+    const submitted = { ...BASE_DETAIL, proof: { ...BASE_DETAIL.proof, status: "submitted" as const } };
+    (useCompletionProof as jest.Mock).mockReturnValue(baseHookReturn({ data: submitted, saveDraft }));
+    renderScreen();
+    fireEvent(screen.getByDisplayValue(BASE_DETAIL.proof.resolution_summary as string), "blur");
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+});

@@ -10,11 +10,13 @@ export interface AttachmentThumbnailProps {
    * this URI. */
   uri?: string;
   label?: string;
+  /** Overrides the default "label" announcement, e.g. to say what a tap does. */
+  accessibilityLabel?: string;
   onPress?: () => void;
   size?: number;
 }
 
-export function AttachmentThumbnail({ uri, label, onPress, size = 64 }: AttachmentThumbnailProps) {
+export function AttachmentThumbnail({ uri, label, accessibilityLabel, onPress, size = 64 }: AttachmentThumbnailProps) {
   const { theme } = useTheme();
   const content = (
     <View
@@ -31,7 +33,7 @@ export function AttachmentThumbnail({ uri, label, onPress, size = 64 }: Attachme
   return (
     <View style={{ alignItems: "center", gap: 4 }}>
       {onPress ? (
-        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label ?? "View attachment"}>{content}</Pressable>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label ?? "View attachment"}>{content}</Pressable>
       ) : content}
       {label ? <AppText variant="caption" color="tertiary" numberOfLines={1}>{label}</AppText> : null}
     </View>

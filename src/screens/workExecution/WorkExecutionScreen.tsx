@@ -20,6 +20,7 @@ import { uploadChecklistEvidence } from "../../services/media/mediaApi";
 import { useWorkExecution } from "./useWorkExecution";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { JobExecutionStackParamList } from "../../navigation/routeTypes";
+import { backToJobDetail } from "../../navigation/backToJobDetail";
 
 type Props = NativeStackScreenProps<JobExecutionStackParamList, "Checklist">;
 
@@ -42,7 +43,7 @@ export function WorkExecutionScreen({ route, navigation }: Props) {
     mutating, mutationError, startWork, pauseWork, resumeWork, finishWork, requestPart, saveChecklistResponse,
   } = useWorkExecution(jobId);
 
-  const goBack = useCallback(() => navigation.navigate("JobDetail", { jobId }), [navigation, jobId]);
+  const goBack = useCallback(() => backToJobDetail(navigation, jobId), [navigation, jobId]);
   const viewEstimate = useCallback(() => navigation.navigate("Estimate", { jobId }), [navigation, jobId]);
 
   const handleStart = useCallback(async () => { await startWork(); }, [startWork]);
